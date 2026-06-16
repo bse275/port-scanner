@@ -5,20 +5,12 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# Allowed ports (adjust as needed)
+# Fallback-Ports für Hosts ohne eigenen Eintrag in servers.conf
+# (greift nur bei direkter Übergabe per Kommandozeile)
 # ---------------------------------------------------------------------------
 ALLOWED_PORTS=(
   80    # HTTP
   443   # HTTPS
-  25    # SMTP
-  465   # SMTPS
-  587   # SMTP Submission
-  143   # IMAP
-  993   # IMAPS
-  110   # POP3
-  995   # POP3S
-  4190  # Sieve (Stalwart)
-  9876  # SSH — nur Bastion-Host (jump.it.example.com / 203.0.113.40)
 )
 
 # ---------------------------------------------------------------------------
@@ -57,10 +49,11 @@ trap 'rm -f "$TMPFILE"' EXIT
 exec > >(tee "$TMPFILE") 2>&1
 
 # ---------------------------------------------------------------------------
-# Hosts und CIDR-Ranges einlesen
+# Hosts, CIDR-Ranges und per-Host-Ports einlesen
 # ---------------------------------------------------------------------------
 KNOWN_HOSTS=()
 CIDR_RANGES=()
+declare -A HOST_PORTS   # HOST_PORTS["ip"] = "80,443" | "-" | "" (leer = global fallback)
 
 if [[ $# -eq 0 ]]; then
   if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -69,10 +62,13 @@ if [[ $# -eq 0 ]]; then
     exit 1
   fi
   while IFS= read -r line; do
-    if [[ "$line" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
-      CIDR_RANGES+=("$line")
+    host=$(echo "$line" | awk '{print $1}')
+    ports=$(echo "$line" | awk '{print $2}')
+    if [[ "$host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+      CIDR_RANGES+=("$host")
     else
-      KNOWN_HOSTS+=("$line")
+      KNOWN_HOSTS+=("$host")
+      HOST_PORTS["$host"]="${ports:-"-"}"
     fi
   done < <(grep -v '^\s*#' "$CONFIG_FILE" | grep -v '^\s*$')
 
@@ -92,7 +88,6 @@ UNKNOWN_HOSTS=()
 for CIDR in "${CIDR_RANGES[@]}"; do
   echo ""
   echo -e "${BOLD}${YELLOW}  Discovery-Scan: ${CIDR}${RESET}"
-  # TCP-basierter Ping auf häufige Ports — zuverlässiger als ICMP
   while IFS= read -r ip; do
     is_known=0
     for known in "${KNOWN_HOSTS[@]}"; do
@@ -116,7 +111,6 @@ for h in "${UNKNOWN_HOSTS[@]}"; do
   TARGETS+=("$h")
 done
 
-# Lookup-Set für unbekannte Hosts
 declare -A UNKNOWN_SET
 for h in "${UNKNOWN_HOSTS[@]}"; do
   UNKNOWN_SET["$h"]=1
@@ -127,7 +121,6 @@ echo -e "  Bekannte Hosts:    ${#KNOWN_HOSTS[@]}"
 echo -e "  CIDR-Ranges:       ${#CIDR_RANGES[@]}"
 echo -e "  Unbekannte Hosts:  ${#UNKNOWN_HOSTS[@]}"
 
-# /start-Ping: healthchecks.io weiß, dass der Job läuft
 if [[ -n "$HC_UUID" ]]; then
   curl -fsS --retry 3 --max-time 10 "${HC_BASE}/${HC_UUID}/start" > /dev/null 2>&1 || true
 fi
@@ -136,11 +129,24 @@ fi
 ALLOWED_SET=$(IFS=, ; echo "${ALLOWED_PORTS[*]}")
 
 is_allowed() {
-  local port="$1"
-  for p in "${ALLOWED_PORTS[@]}"; do
-    [[ "$p" == "$port" ]] && return 0
-  done
-  return 1
+  local host="$1"
+  local port="$2"
+
+  if [[ -v HOST_PORTS[$host] ]]; then
+    local host_ports="${HOST_PORTS[$host]}"
+    [[ "$host_ports" == "-" ]] && return 1
+    IFS=',' read -ra _list <<< "$host_ports"
+    for p in "${_list[@]}"; do
+      [[ "$p" == "$port" ]] && return 0
+    done
+    return 1
+  else
+    # Host nicht in servers.conf (Kommandozeile) — globale Liste
+    for p in "${ALLOWED_PORTS[@]}"; do
+      [[ "$p" == "$port" ]] && return 0
+    done
+    return 1
+  fi
 }
 
 OVERALL_STATUS=0
@@ -150,6 +156,7 @@ HOST_COUNT=0
 for TARGET in "${TARGETS[@]}"; do
   (( HOST_COUNT++ )) || true
   IS_UNKNOWN=${UNKNOWN_SET[$TARGET]:-}
+  TARGET_PORTS="${HOST_PORTS[$TARGET]:-}"
 
   echo ""
   echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
@@ -160,10 +167,17 @@ for TARGET in "${TARGETS[@]}"; do
     echo -e "${BOLD}  Scanne: ${TARGET}${RESET}"
   fi
   echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
-  echo -e "  Erlaubte Ports: ${ALLOWED_SET}"
+
+  if [[ "$TARGET_PORTS" == "-" ]]; then
+    echo -e "  Erlaubte Ports: ${RED}keine — darf nicht erreichbar sein${RESET}"
+  elif [[ -n "$TARGET_PORTS" ]]; then
+    echo -e "  Erlaubte Ports: ${TARGET_PORTS}"
+  else
+    echo -e "  Erlaubte Ports: ${ALLOWED_SET} (global)"
+  fi
   echo ""
 
-  NMAP_OUTPUT=$(nmap -sV --open -p 1-10000 "$TARGET" 2>&1)
+  NMAP_OUTPUT=$(nmap -sV --open -p 1-10000 -T4 "$TARGET" 2>&1)
 
   if echo "$NMAP_OUTPUT" | grep -q "Host seems down"; then
     echo -e "  ${YELLOW}⚠ Host antwortet nicht oder ist nicht erreichbar.${RESET}"
@@ -173,7 +187,11 @@ for TARGET in "${TARGETS[@]}"; do
   OPEN_PORTS=$(echo "$NMAP_OUTPUT" | grep -E '^[0-9]+/(tcp|udp)\s+open' || true)
 
   if [[ -z "$OPEN_PORTS" ]]; then
-    echo -e "  ${GREEN}✓ Keine offenen Ports gefunden.${RESET}"
+    if [[ "$TARGET_PORTS" == "-" ]]; then
+      echo -e "  ${GREEN}✓ Keine offenen Ports — korrekt so.${RESET}"
+    else
+      echo -e "  ${GREEN}✓ Keine offenen Ports gefunden.${RESET}"
+    fi
     continue
   fi
 
@@ -187,7 +205,7 @@ for TARGET in "${TARGETS[@]}"; do
       FINDINGS+=("UNBEKANNTER HOST  ${TARGET}  ${line}")
       HOST_STATUS=1
       OVERALL_STATUS=1
-    elif is_allowed "$PORT"; then
+    elif is_allowed "$TARGET" "$PORT"; then
       echo -e "  ${GREEN}✓ ${line}${RESET}"
     else
       echo -e "  ${RED}✗ UNERLAUBT: ${line}${RESET}"
