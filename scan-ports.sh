@@ -149,6 +149,37 @@ is_allowed() {
   fi
 }
 
+send_mail() {
+  local subject="$1"
+  local body="$2"
+  local mail_conf="${SCRIPT_DIR}/mail.conf"
+
+  [[ ! -f "$mail_conf" ]] && return 0
+  # shellcheck source=/dev/null
+  source "$mail_conf"
+
+  local mail_tmp
+  mail_tmp=$(mktemp)
+  trap 'rm -f "$mail_tmp"' RETURN
+
+  {
+    printf "From: Port Scanner <%s>\r\n" "$MAIL_FROM"
+    printf "To: %s\r\n" "$MAIL_TO"
+    printf "Subject: %s\r\n" "$subject"
+    printf "Content-Type: text/plain; charset=utf-8\r\n"
+    printf "MIME-Version: 1.0\r\n"
+    printf "\r\n"
+    echo "$body"
+  } > "$mail_tmp"
+
+  curl -fsS --retry 2 --max-time 30 \
+    --url "smtps://${MAIL_HOST}:${MAIL_PORT}" \
+    --user "${MAIL_USER}:${MAIL_PASS}" \
+    --mail-from "$MAIL_FROM" \
+    --mail-rcpt "$MAIL_TO" \
+    --upload-file "$mail_tmp" > /dev/null 2>&1 || true
+}
+
 OVERALL_STATUS=0
 FINDINGS=()
 HOST_COUNT=0
@@ -252,20 +283,31 @@ if [[ $(wc -l < "$LOG_FILE") -gt $MAX_LOG_LINES ]]; then
   tail -n "$MAX_LOG_LINES" "$LOG_FILE" > "${LOG_FILE}.tmp" && mv "${LOG_FILE}.tmp" "$LOG_FILE"
 fi
 
+CLEAN_OUTPUT=$(sed 's/\x1B\[[0-9;]*[mK]//g' "$TMPFILE")
+SCAN_DATE=$(date '+%Y-%m-%d %H:%M')
+
 # ---------------------------------------------------------------------------
 # healthchecks.io Ping
 # ---------------------------------------------------------------------------
 if [[ -n "$HC_UUID" ]]; then
-  HC_BODY=$(sed 's/\x1B\[[0-9;]*[mK]//g' "$TMPFILE")
   if [[ $OVERALL_STATUS -eq 0 ]]; then
     curl -fsS --retry 3 --max-time 10 \
-      --data-binary "$HC_BODY" \
+      --data-binary "$CLEAN_OUTPUT" \
       "${HC_BASE}/${HC_UUID}" > /dev/null 2>&1 || true
   else
     curl -fsS --retry 3 --max-time 10 \
-      --data-binary "$HC_BODY" \
+      --data-binary "$CLEAN_OUTPUT" \
       "${HC_BASE}/${HC_UUID}/fail" > /dev/null 2>&1 || true
   fi
+fi
+
+# ---------------------------------------------------------------------------
+# Mail-Benachrichtigung
+# ---------------------------------------------------------------------------
+if [[ $OVERALL_STATUS -eq 0 ]]; then
+  send_mail "[Port Scanner] OK - ${HOST_COUNT} Hosts geprueft, ${SCAN_DATE}" "$CLEAN_OUTPUT"
+else
+  send_mail "[Port Scanner] FAIL - ${#FINDINGS[@]} Problem(e) gefunden, ${SCAN_DATE}" "$CLEAN_OUTPUT"
 fi
 
 exit $OVERALL_STATUS
