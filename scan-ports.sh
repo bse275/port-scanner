@@ -320,6 +320,47 @@ OVERALL_STATUS=0
 FINDINGS=()
 HOST_COUNT=0
 
+# ---------------------------------------------------------------------------
+# Pre-flight Konnektivitätstests — nur im Test-Modus
+# ---------------------------------------------------------------------------
+if [[ $TEST_MODE -eq 1 ]]; then
+  echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
+  echo -e "${BOLD}  Pre-flight Konnektivitätstests${RESET}"
+  echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
+  echo ""
+
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    _PING="ping -c 1 -t 3"
+  else
+    _PING="ping -c 1 -W 3"
+  fi
+
+  # 1. Internet erreichbar?
+  if $_PING 8.8.8.8 &>/dev/null; then
+    echo -e "  ${GREEN}✓ Internet erreichbar (8.8.8.8)${RESET}"
+  else
+    echo -e "  ${RED}✗ Internet nicht erreichbar (8.8.8.8)${RESET}"
+  fi
+
+  # 2. DNS + healthchecks.io
+  if $_PING hc-ping.com &>/dev/null; then
+    echo -e "  ${GREEN}✓ DNS funktioniert, hc-ping.com erreichbar${RESET}"
+  else
+    echo -e "  ${RED}✗ hc-ping.com nicht auflösbar oder nicht erreichbar${RESET}"
+  fi
+
+  # 3. Test-Hosts erreichbar?
+  for h in "${TARGETS[@]}"; do
+    if nmap -sn "$h" 2>/dev/null | grep -q "Host is up"; then
+      echo -e "  ${GREEN}✓ Test-Host erreichbar: ${h}${RESET}"
+    else
+      echo -e "  ${RED}✗ Test-Host nicht erreichbar: ${h}${RESET}"
+    fi
+  done
+
+  echo ""
+fi
+
 for TARGET in "${TARGETS[@]}"; do
   (( HOST_COUNT++ )) || true
   IS_UNKNOWN=${UNKNOWN_SET[$TARGET]:-}
