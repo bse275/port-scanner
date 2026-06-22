@@ -464,10 +464,16 @@ fi
 # ---------------------------------------------------------------------------
 # Mail-Benachrichtigung
 # ---------------------------------------------------------------------------
-if [[ $OVERALL_STATUS -eq 0 ]]; then
-  send_mail "[Port Scanner] OK - ${HOST_COUNT} Hosts geprueft, ${SCAN_DATE}" "$CLEAN_OUTPUT"
+if [[ $TEST_MODE -eq 1 ]]; then
+  MAIL_PREFIX="[Port Scanner][TEST]"
 else
-  send_mail "[Port Scanner] FAIL - ${#FINDINGS[@]} Problem(e) gefunden, ${SCAN_DATE}" "$CLEAN_OUTPUT"
+  MAIL_PREFIX="[Port Scanner]"
+fi
+
+if [[ $OVERALL_STATUS -eq 0 ]]; then
+  send_mail "${MAIL_PREFIX} OK - ${HOST_COUNT} Hosts geprueft, ${SCAN_DATE}" "$CLEAN_OUTPUT"
+else
+  send_mail "${MAIL_PREFIX} FAIL - ${#FINDINGS[@]} Problem(e) gefunden, ${SCAN_DATE}" "$CLEAN_OUTPUT"
 fi
 
 exit $OVERALL_STATUS
