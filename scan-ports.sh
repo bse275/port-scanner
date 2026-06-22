@@ -631,10 +631,23 @@ else
   MAIL_PREFIX="[Port Scanner]"
 fi
 
+MAIL_BODY="$CLEAN_OUTPUT"
+if [[ $OVERALL_STATUS -ne 0 && ${#FINDINGS[@]} -gt 0 ]]; then
+  MAIL_BODY+="
+$(printf '═%.0s' {1..50})
+ Zusammenfassung — ${#FINDINGS[@]} Problem(e)
+$(printf '═%.0s' {1..50})
+"
+  for f in "${FINDINGS[@]}"; do
+    MAIL_BODY+="  ${f}
+"
+  done
+fi
+
 if [[ $OVERALL_STATUS -eq 0 ]]; then
-  send_mail "${MAIL_PREFIX} OK - ${HOST_COUNT} Hosts geprueft, ${SCAN_DATE}" "$CLEAN_OUTPUT"
+  send_mail "${MAIL_PREFIX} OK - ${HOST_COUNT} Hosts geprueft, ${SCAN_DATE}" "$MAIL_BODY"
 else
-  send_mail "${MAIL_PREFIX} FAIL - ${#FINDINGS[@]} Problem(e) gefunden, ${SCAN_DATE}" "$CLEAN_OUTPUT"
+  send_mail "${MAIL_PREFIX} FAIL - ${#FINDINGS[@]} Problem(e) gefunden, ${SCAN_DATE}" "$MAIL_BODY"
 fi
 
 exit $OVERALL_STATUS
