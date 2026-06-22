@@ -11,6 +11,7 @@ DRY_RUN=0
 TEST_MODE=0
 MAIL_TEST=0
 HC_TEST=0
+HC_FAIL=0
 ARGS=()
 for arg in "$@"; do
   case "$arg" in
@@ -18,6 +19,7 @@ for arg in "$@"; do
     --test|-t)     TEST_MODE=1 ;;
     --mail-test)   MAIL_TEST=1 ;;
     --hc-test)     HC_TEST=1 ;;
+    --hc-fail)     HC_TEST=1; HC_FAIL=1 ;;
     *)             ARGS+=("$arg") ;;
   esac
 done
@@ -125,8 +127,19 @@ if [[ $HC_TEST -eq 1 ]]; then
     echo -e "${RED}Fehler: HC_UUID ist leer in hc.conf${RESET}" >&2
     exit 1
   fi
-  echo -e "${BOLD}${CYAN}  Sende Testping an healthchecks.io ...${RESET}"
-  if curl -fsS --retry 3 --max-time 10 "${HC_BASE}/${HC_UUID}" > /dev/null 2>&1; then
+  if [[ $HC_FAIL -eq 1 ]]; then
+    HC_ENDPOINT="${HC_BASE}/${HC_UUID}/fail"
+    echo -e "${BOLD}${YELLOW}  Simuliere FAIL-Ping an healthchecks.io ...${RESET}"
+  else
+    HC_ENDPOINT="${HC_BASE}/${HC_UUID}"
+    echo -e "${BOLD}${CYAN}  Sende Testping an healthchecks.io ...${RESET}"
+  fi
+  HC_BODY="Testping vom Port Scanner.
+Server: $(hostname)
+Datum:  $(date '+%Y-%m-%d %H:%M:%S')"
+  if curl -fsS --retry 3 --max-time 10 \
+      --data-binary "$HC_BODY" \
+      "$HC_ENDPOINT" > /dev/null 2>&1; then
     echo -e "${GREEN}${BOLD}  ✓ healthchecks.io hat geantwortet — UUID ist gültig.${RESET}"
   else
     echo -e "${RED}${BOLD}  ✗ Fehler — UUID oder Verbindung prüfen.${RESET}" >&2

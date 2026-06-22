@@ -98,6 +98,40 @@ Ein Scan aller Server dauert je nach Antwortverhalten der Hosts ca. **15–40 Mi
 
 ---
 
+## Test-Flags
+
+| Flag | Beschreibung |
+|---|---|
+| `--dry-run` / `-n` | Config einlesen und anzeigen, kein Scan, kein Mail, kein Log |
+| `--test` / `-t` | Nur als `test` markierte Hosts in servers.conf scannen |
+| `--mail-test` | Testmail senden und beenden (braucht mail.conf) |
+| `--hc-test` | Testping an healthchecks.io senden und beenden (braucht hc.conf) |
+| `--hc-fail` | Fail-Ping an healthchecks.io simulieren (braucht hc.conf) |
+
+Flags können kombiniert werden:
+
+```bash
+# Config prüfen ohne zu scannen:
+./scan-ports.sh --dry-run
+
+# Nur Test-Hosts scannen (schnell):
+./scan-ports.sh --test
+
+# Mail-Versand testen:
+./scan-ports.sh --mail-test
+
+# healthchecks.io testen:
+./scan-ports.sh --hc-test
+
+# Fail-Alarm in healthchecks.io auslösen:
+./scan-ports.sh --hc-fail
+
+# Kombination — Test-Hosts ohne Scan:
+./scan-ports.sh --test --dry-run
+```
+
+---
+
 ## Automatischer Betrieb (Cron)
 
 ```bash
