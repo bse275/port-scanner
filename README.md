@@ -111,7 +111,7 @@ Ein Scan aller Server dauert auf dem Pi ca. **20–30 Minuten**.
 
 | Flag | Beschreibung |
 |---|---|
-| `--dry-run` / `-n` | Config einlesen und anzeigen, kein Scan, kein Mail, kein Log |
+| `--test-config` | Config-Dateien prüfen (servers.conf, mail.conf, hc.conf) und beenden |
 | `--test` / `-t` | Nur als `test` markierte Hosts scannen, inkl. Pre-flight Checks |
 | `--mail-test` | Testmail senden und beenden (braucht mail.conf) |
 | `--hc-test` | Testping an healthchecks.io senden und beenden (braucht hc.conf) |
@@ -120,8 +120,8 @@ Ein Scan aller Server dauert auf dem Pi ca. **20–30 Minuten**.
 Flags können kombiniert werden:
 
 ```bash
-# Config prüfen ohne zu scannen:
-./scan-ports.sh --dry-run
+# Config-Dateien prüfen:
+./scan-ports.sh --test-config
 
 # Nur Test-Hosts scannen (schnell, inkl. Pre-flight Checks):
 ./scan-ports.sh --test

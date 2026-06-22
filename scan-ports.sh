@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Port compliance scanner — checks servers for unexpected open ports.
-# Usage: ./scan-ports.sh [--dry-run|-n] [--test|-t] [host1 host2 ...]  (ohne Argumente: liest servers.conf)
+# Usage: ./scan-ports.sh [--test-config] [--test|-t] [host1 host2 ...]  (ohne Argumente: liest servers.conf)
 
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# Dry-Run Flag auslesen (vor allem anderen)
+# Flags auslesen (vor allem anderen)
 # ---------------------------------------------------------------------------
-DRY_RUN=0
+TEST_CONFIG=0
 TEST_MODE=0
 MAIL_TEST=0
 HC_TEST=0
@@ -15,7 +15,7 @@ HC_FAIL=0
 ARGS=()
 for arg in "$@"; do
   case "$arg" in
-    --dry-run|-n)  DRY_RUN=1 ;;
+    --test-config) TEST_CONFIG=1 ;;
     --test|-t)     TEST_MODE=1 ;;
     --mail-test)   MAIL_TEST=1 ;;
     --hc-test)     HC_TEST=1 ;;
@@ -54,13 +54,6 @@ BOLD='\033[1m'
 RESET='\033[0m'
 
 # ---------------------------------------------------------------------------
-
-if [[ $DRY_RUN -eq 1 ]]; then
-  echo -e "${BOLD}${YELLOW}╔══════════════════════════════════════════════════╗${RESET}"
-  echo -e "${BOLD}${YELLOW}║  DRY-RUN MODUS — kein Scan, kein Mail, kein Log  ║${RESET}"
-  echo -e "${BOLD}${YELLOW}╚══════════════════════════════════════════════════╝${RESET}"
-  echo ""
-fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/servers.conf"
@@ -107,7 +100,7 @@ if [[ $MAIL_TEST -eq 1 ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# --hc-test: Testping an healthchecks.io senden und beenden
+# --hc-test / --hc-fail: Testping an healthchecks.io senden und beenden
 # ---------------------------------------------------------------------------
 if [[ $HC_TEST -eq 1 ]]; then
   HC_CONF="${SCRIPT_DIR}/hc.conf"
@@ -196,6 +189,134 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# --test-config: Config-Dateien prüfen und beenden
+# ---------------------------------------------------------------------------
+if [[ $TEST_CONFIG -eq 1 ]]; then
+  CONFIG_OK=0
+
+  echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
+  echo -e "${BOLD}  Config-Prüfung${RESET}"
+  echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
+  echo ""
+
+  # --- servers.conf ---
+  echo -e "${BOLD}servers.conf${RESET}"
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo -e "  ${RED}✗ Datei nicht gefunden: ${CONFIG_FILE}${RESET}"
+    CONFIG_OK=1
+  else
+    echo -e "  ${GREEN}✓ Datei gefunden${RESET}"
+
+    # Jede Zeile validieren
+    LINE_NUM=0
+    while IFS= read -r line; do
+      (( LINE_NUM++ )) || true
+      host=$(echo "$line" | awk '{print $1}')
+      ports=$(echo "$line" | awk '{print $2}')
+      flag=$(echo "$line" | awk '{if (NF >= 3 && $3 !~ /^#/) print $3; else print ""}')
+
+      # CIDR-Format prüfen
+      if [[ "$host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+        echo -e "  ${GREEN}✓ CIDR: ${host}${RESET}"
+        continue
+      fi
+
+      # IP-Format prüfen
+      if ! [[ "$host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo -e "  ${RED}✗ Zeile ${LINE_NUM}: Ungültiges IP-Format: '${host}'${RESET}"
+        CONFIG_OK=1
+        continue
+      fi
+
+      # Ports prüfen
+      if [[ "$ports" == "-" || -z "$ports" ]]; then
+        PORT_OK=1
+      else
+        PORT_OK=1
+        IFS=',' read -ra _ports <<< "$ports"
+        for p in "${_ports[@]}"; do
+          if ! [[ "$p" =~ ^[0-9]+$ ]] || (( p < 1 || p > 65535 )); then
+            echo -e "  ${RED}✗ Zeile ${LINE_NUM}: Ungültiger Port '${p}' bei Host ${host}${RESET}"
+            CONFIG_OK=1
+            PORT_OK=0
+          fi
+        done
+      fi
+
+      # Flag prüfen
+      if [[ -n "$flag" && "$flag" != "test" ]]; then
+        echo -e "  ${RED}✗ Zeile ${LINE_NUM}: Unbekannter Flag '${flag}' bei Host ${host} (erlaubt: 'test')${RESET}"
+        CONFIG_OK=1
+      fi
+
+      TEST_MARKER=""
+      [[ "$flag" == "test" ]] && TEST_MARKER=" ${YELLOW}[test]${RESET}"
+      [[ $PORT_OK -eq 1 ]] && echo -e "  ${GREEN}✓ ${host}  ${ports:-"-"}${TEST_MARKER}${RESET}"
+
+    done < <(grep -v '^\s*#' "$CONFIG_FILE" | grep -v '^\s*$')
+
+    echo -e "  → ${#KNOWN_HOSTS[@]} Hosts, ${#CIDR_RANGES[@]} CIDR-Range(s), ${#HOST_TEST[@]} Test-Host(s)"
+  fi
+  echo ""
+
+  # --- mail.conf ---
+  echo -e "${BOLD}mail.conf${RESET}"
+  MAIL_CONF="${SCRIPT_DIR}/mail.conf"
+  if [[ ! -f "$MAIL_CONF" ]]; then
+    echo -e "  ${YELLOW}⚠ Nicht gefunden — keine Mail-Benachrichtigung${RESET}"
+  else
+    echo -e "  ${GREEN}✓ Datei gefunden${RESET}"
+    # shellcheck source=/dev/null
+    source "$MAIL_CONF"
+    for var in MAIL_HOST MAIL_PORT MAIL_USER MAIL_PASS MAIL_FROM MAIL_TO; do
+      if [[ -z "${!var:-}" ]]; then
+        echo -e "  ${RED}✗ ${var} ist leer${RESET}"
+        CONFIG_OK=1
+      else
+        # Passwort nicht anzeigen
+        if [[ "$var" == "MAIL_PASS" ]]; then
+          echo -e "  ${GREEN}✓ ${var} = ***${RESET}"
+        else
+          echo -e "  ${GREEN}✓ ${var} = ${!var}${RESET}"
+        fi
+      fi
+    done
+  fi
+  echo ""
+
+  # --- hc.conf ---
+  echo -e "${BOLD}hc.conf${RESET}"
+  if [[ ! -f "$HC_CONF" ]]; then
+    echo -e "  ${YELLOW}⚠ Nicht gefunden — kein healthchecks.io Ping${RESET}"
+  else
+    echo -e "  ${GREEN}✓ Datei gefunden${RESET}"
+    # shellcheck source=/dev/null
+    source "$HC_CONF"
+    if [[ -z "$HC_UUID" ]]; then
+      echo -e "  ${RED}✗ HC_UUID ist leer${RESET}"
+      CONFIG_OK=1
+    elif ! [[ "$HC_UUID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+      echo -e "  ${RED}✗ HC_UUID hat kein gültiges UUID-Format: ${HC_UUID}${RESET}"
+      CONFIG_OK=1
+    else
+      echo -e "  ${GREEN}✓ HC_UUID = ${HC_UUID}${RESET}"
+    fi
+    echo -e "  ${GREEN}✓ HC_BASE = ${HC_BASE}${RESET}"
+  fi
+  echo ""
+
+  echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
+  if [[ $CONFIG_OK -eq 0 ]]; then
+    echo -e "${GREEN}${BOLD}  ✓ Alle Configs sind gültig.${RESET}"
+  else
+    echo -e "${RED}${BOLD}  ✗ Config-Fehler gefunden — bitte korrigieren.${RESET}"
+  fi
+  echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
+  echo ""
+  exit $CONFIG_OK
+fi
+
+# ---------------------------------------------------------------------------
 # CIDR-Ranges: Discovery-Scan — unbekannte Hosts finden
 # ---------------------------------------------------------------------------
 UNKNOWN_HOSTS=()
@@ -203,8 +324,8 @@ UNKNOWN_HOSTS=()
 for CIDR in "${CIDR_RANGES[@]}"; do
   echo ""
   echo -e "${BOLD}${YELLOW}  Discovery-Scan: ${CIDR}${RESET}"
-  if [[ $DRY_RUN -eq 1 || $TEST_MODE -eq 1 ]]; then
-    echo -e "  ${YELLOW}[$([ $DRY_RUN -eq 1 ] && echo DRY-RUN || echo TEST)] Discovery-Scan übersprungen.${RESET}"
+  if [[ $TEST_MODE -eq 1 ]]; then
+    echo -e "  ${YELLOW}[TEST] Discovery-Scan übersprungen.${RESET}"
     continue
   fi
   while IFS= read -r ip; do
@@ -386,12 +507,6 @@ for TARGET in "${TARGETS[@]}"; do
   fi
   echo ""
 
-  if [[ $DRY_RUN -eq 1 ]]; then
-    echo -e "  ${YELLOW}[DRY-RUN] nmap-Scan übersprungen.${RESET}"
-    echo ""
-    continue
-  fi
-
   NMAP_TMP=$(mktemp)
   nmap -v --open -p 1-10000 -T4 --stats-every 30s "$TARGET" 2>&1 | tee "$NMAP_TMP"
   NMAP_OUTPUT=$(cat "$NMAP_TMP")
@@ -450,15 +565,6 @@ else
 fi
 echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
 echo ""
-
-# ---------------------------------------------------------------------------
-# Log, Notifications — im Dry-Run alles überspringen
-# ---------------------------------------------------------------------------
-if [[ $DRY_RUN -eq 1 ]]; then
-  echo -e "${BOLD}${YELLOW}  [DRY-RUN] Kein Log-Eintrag, kein Mail, kein healthchecks.io Ping.${RESET}"
-  echo ""
-  exit 0
-fi
 
 # ---------------------------------------------------------------------------
 # Log-Eintrag schreiben — bei Problemen immer, im Test-Modus auch bei OK
