@@ -490,15 +490,22 @@ if [[ $TEST_MODE -eq 1 ]]; then
 fi
 
 for TARGET in "${TARGETS[@]}"; do
-  (( HOST_COUNT++ )) || true
   IS_UNKNOWN=${UNKNOWN_SET[$TARGET]:-}
   TARGET_PORTS="${HOST_PORTS[$TARGET]:-}"
+
+  # Unbekannte Hosts: nur scannen wenn sie tatsächlich antworten
+  if [[ -n "$IS_UNKNOWN" ]]; then
+    if ! nmap -sn -PS80,443,25,9876 "$TARGET" 2>/dev/null | grep -q "Host is up"; then
+      continue
+    fi
+  fi
+
+  (( HOST_COUNT++ )) || true
 
   echo ""
   echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
   if [[ -n "$IS_UNKNOWN" ]]; then
     echo -e "${BOLD}  Scanne: ${TARGET}  ${RED}[UNBEKANNTER HOST]${RESET}"
-    OVERALL_STATUS=1
   else
     echo -e "${BOLD}  Scanne: ${TARGET}${RESET}"
   fi
@@ -519,14 +526,18 @@ for TARGET in "${TARGETS[@]}"; do
   rm -f "$NMAP_TMP"
 
   if echo "$NMAP_OUTPUT" | grep -q "Host seems down"; then
-    echo -e "  ${YELLOW}⚠ Host antwortet nicht oder ist nicht erreichbar.${RESET}"
+    [[ -z "$IS_UNKNOWN" ]] && echo -e "  ${YELLOW}⚠ Host antwortet nicht oder ist nicht erreichbar.${RESET}"
     continue
   fi
 
   OPEN_PORTS=$(echo "$NMAP_OUTPUT" | grep -E '^[0-9]+/(tcp|udp)\s+open' || true)
 
   if [[ -z "$OPEN_PORTS" ]]; then
-    if [[ "$TARGET_PORTS" == "-" ]]; then
+    if [[ -n "$IS_UNKNOWN" ]]; then
+      echo -e "  ${YELLOW}⚠ Hinweis: Unbekannter Host entdeckt. servers.conf aktuell?${RESET}"
+      FINDINGS+=("UNBEKANNTER HOST  ${TARGET}  (aktiv, keine offenen Ports)")
+      OVERALL_STATUS=1
+    elif [[ "$TARGET_PORTS" == "-" ]]; then
       echo -e "  ${GREEN}✓ Keine offenen Ports — korrekt so.${RESET}"
     else
       echo -e "  ${GREEN}✓ Keine offenen Ports gefunden.${RESET}"
