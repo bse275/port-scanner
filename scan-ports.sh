@@ -203,8 +203,8 @@ UNKNOWN_HOSTS=()
 for CIDR in "${CIDR_RANGES[@]}"; do
   echo ""
   echo -e "${BOLD}${YELLOW}  Discovery-Scan: ${CIDR}${RESET}"
-  if [[ $DRY_RUN -eq 1 ]]; then
-    echo -e "  ${YELLOW}[DRY-RUN] Discovery-Scan übersprungen.${RESET}"
+  if [[ $DRY_RUN -eq 1 || $TEST_MODE -eq 1 ]]; then
+    echo -e "  ${YELLOW}[$([ $DRY_RUN -eq 1 ] && echo DRY-RUN || echo TEST)] Discovery-Scan übersprungen.${RESET}"
     continue
   fi
   while IFS= read -r ip; do
