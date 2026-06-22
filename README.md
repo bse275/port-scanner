@@ -7,7 +7,9 @@ Läuft automatisch per Cron-Job auf dem Raspberry Pi und meldet Probleme an heal
 
 ## Hintergrund
 
-Die Netzwerk-Infrastruktur (Routing, Switching, VPN) wird über **MikroTik**-Geräte abgesichert. Auf VM-Ebene greift die **Proxmox-Firewall**. Der Scanner läuft von außen () und sieht genau was das Internet sieht — so lässt sich prüfen ob beide Ebenen korrekt greifen und keine unerwarteten Ports offen sind.
+Die öffentlichen IPs (203.0.113.x) haben **keinen vorgelagerten Perimeter-Firewall** — was auf einem Proxmox-Host oder einer VM offen ist, ist direkt aus dem Internet erreichbar. Schutz auf VM-Ebene bietet ausschließlich die **Proxmox-Firewall**. Die internen Netze (Management, IPMI, VPN, etc.) sind über **MikroTik**-Geräte abgesichert und nicht öffentlich erreichbar.
+
+Der Scanner läuft von außen () und prüft was das Internet tatsächlich sieht — so fällt auf wenn die Proxmox-Firewall einer VM fehlt oder falsch konfiguriert ist.
 
 Erlaubt sind grundsätzlich nur:
 - **80 / 443** — HTTP/HTTPS (alle Webserver)
@@ -166,7 +168,7 @@ crontab -e
 
 Beispiel: täglich um 02:00 Uhr nachts:
 ```
-0 2 * * * /home/benny/port-scanner/scan-ports.sh
+0 2 * * * /port-scanner/scan-ports.sh
 ```
 
 ---
