@@ -55,8 +55,20 @@ Jede Zeile definiert einen Server und seine erlaubten Ports:
 
 **Dritte Spalte `test`** — markiert einen Host als Test-Host für `--test` Modus (schneller Einzelscan ohne Discovery).
 
+**Kommentare** können VM-ID, Hostname und DNS-Name enthalten — rein informativ, haben keinen Einfluss auf den Scan:
+```
+203.0.113.20  80,443  # VM 101 — docker
+203.0.113.40  9876    # CT 200 — bastion01 / SSH-Jump (jump.it.example.com)
+```
+
 **CIDR-Zeilen** (z.B. `203.0.113.0/26`) lösen zusätzlich einen Discovery-Scan aus:  
-Alle aktiven Hosts im Subnetz werden gefunden. Hosts die **nicht** in der Liste stehen werden als **UNBEKANNTER HOST** markiert — das ist ein Fund. Damit fällt z.B. eine vergessene Test-VM auf.
+Alle aktiven Hosts im Subnetz werden gefunden. Hosts die **nicht** in der Liste stehen werden je nach Ergebnis gemeldet:
+
+| Situation | Verhalten |
+|---|---|
+| Unbekannte IP, antwortet nicht | still ignoriert |
+| Unbekannte IP, antwortet, keine Ports offen | ⚠ Hinweis — Mail + HC-Fail |
+| Unbekannte IP, antwortet, Ports offen | ✗ ALARM — Mail + HC-Fail |
 
 ### Neuen Server hinzufügen
 
