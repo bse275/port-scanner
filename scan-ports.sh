@@ -350,11 +350,14 @@ for TARGET in "${TARGETS[@]}"; do
     continue
   fi
 
+  NMAP_TMP=$(mktemp)
   if [[ $TEST_MODE -eq 1 ]]; then
-    NMAP_OUTPUT=$(nmap --open -p 1-10000 -T4 "$TARGET" 2>&1)
+    nmap -v --open -p 1-10000 -T4 --stats-every 30s "$TARGET" 2>&1 | tee "$NMAP_TMP"
   else
-    NMAP_OUTPUT=$(nmap -sV --open -p 1-10000 -T4 "$TARGET" 2>&1)
+    nmap -v -sV --open -p 1-10000 -T4 --stats-every 30s "$TARGET" 2>&1 | tee "$NMAP_TMP"
   fi
+  NMAP_OUTPUT=$(cat "$NMAP_TMP")
+  rm -f "$NMAP_TMP"
 
   if echo "$NMAP_OUTPUT" | grep -q "Host seems down"; then
     echo -e "  ${YELLOW}⚠ Host antwortet nicht oder ist nicht erreichbar.${RESET}"
