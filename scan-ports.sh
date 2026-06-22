@@ -343,10 +343,11 @@ if [[ $TEST_MODE -eq 1 ]]; then
   fi
 
   # 2. DNS + healthchecks.io
-  if $_PING hc-ping.com &>/dev/null; then
-    echo -e "  ${GREEN}✓ DNS funktioniert, hc-ping.com erreichbar${RESET}"
+  HC_HOST=$(echo "$HC_BASE" | sed 's|https\?://||')
+  if $_PING "$HC_HOST" &>/dev/null; then
+    echo -e "  ${GREEN}✓ DNS funktioniert, ${HC_HOST} erreichbar${RESET}"
   else
-    echo -e "  ${RED}✗ hc-ping.com nicht auflösbar oder nicht erreichbar${RESET}"
+    echo -e "  ${RED}✗ ${HC_HOST} nicht auflösbar oder nicht erreichbar${RESET}"
   fi
 
   # 3. Test-Hosts erreichbar?
