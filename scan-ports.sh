@@ -37,6 +37,7 @@ ALLOWED_PORTS=(
 # ---------------------------------------------------------------------------
 # healthchecks.io — Zugangsdaten aus hc.conf laden (optional)
 # ---------------------------------------------------------------------------
+HC_ENABLED="true"
 HC_UUID=""
 HC_BASE="https://hc-ping.com"
 
@@ -292,16 +293,21 @@ if [[ $TEST_CONFIG -eq 1 ]]; then
     echo -e "  ${GREEN}✓ Datei gefunden${RESET}"
     # shellcheck source=/dev/null
     source "$HC_CONF"
-    if [[ -z "$HC_UUID" ]]; then
-      echo -e "  ${RED}✗ HC_UUID ist leer${RESET}"
-      CONFIG_OK=1
-    elif ! [[ "$HC_UUID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
-      echo -e "  ${RED}✗ HC_UUID hat kein gültiges UUID-Format: ${HC_UUID}${RESET}"
-      CONFIG_OK=1
+    if [[ "$HC_ENABLED" != "true" ]]; then
+      echo -e "  ${YELLOW}⚠ HC_ENABLED = ${HC_ENABLED} — healthchecks.io deaktiviert, keine weiteren Prüfungen${RESET}"
     else
-      echo -e "  ${GREEN}✓ HC_UUID = ${HC_UUID}${RESET}"
+      echo -e "  ${GREEN}✓ HC_ENABLED = true${RESET}"
+      if [[ -z "$HC_UUID" ]]; then
+        echo -e "  ${RED}✗ HC_UUID ist leer${RESET}"
+        CONFIG_OK=1
+      elif ! [[ "$HC_UUID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+        echo -e "  ${RED}✗ HC_UUID hat kein gültiges UUID-Format: ${HC_UUID}${RESET}"
+        CONFIG_OK=1
+      else
+        echo -e "  ${GREEN}✓ HC_UUID = ${HC_UUID}${RESET}"
+      fi
+      echo -e "  ${GREEN}✓ HC_BASE = ${HC_BASE}${RESET}"
     fi
-    echo -e "  ${GREEN}✓ HC_BASE = ${HC_BASE}${RESET}"
   fi
   echo ""
 
@@ -378,7 +384,7 @@ echo -e "  Bekannte Hosts:    ${#KNOWN_HOSTS[@]}"
 echo -e "  CIDR-Ranges:       ${#CIDR_RANGES[@]}"
 echo -e "  Unbekannte Hosts:  ${#UNKNOWN_HOSTS[@]}"
 
-if [[ -n "$HC_UUID" && $TEST_MODE -eq 0 ]]; then
+if [[ -n "$HC_UUID" && $TEST_MODE -eq 0 && "$HC_ENABLED" == "true" ]]; then
   curl -fsS --retry 3 --max-time 10 "${HC_BASE}/${HC_UUID}/start" > /dev/null 2>&1 || true
 fi
 
@@ -593,7 +599,7 @@ SCAN_DATE=$(date '+%Y-%m-%d %H:%M')
 # ---------------------------------------------------------------------------
 # healthchecks.io Ping
 # ---------------------------------------------------------------------------
-if [[ -n "$HC_UUID" && $TEST_MODE -eq 0 ]]; then
+if [[ -n "$HC_UUID" && $TEST_MODE -eq 0 && "$HC_ENABLED" == "true" ]]; then
   if [[ $OVERALL_STATUS -eq 0 ]]; then
     curl -fsS --retry 3 --max-time 10 \
       --data-binary "$CLEAN_OUTPUT" \

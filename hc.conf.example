@@ -1,2 +1,3 @@
+HC_ENABLED="true"   # auf "false" setzen um healthchecks.io zu deaktivieren
 HC_UUID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 HC_BASE="https://hc-ping.com"
