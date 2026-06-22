@@ -416,15 +416,19 @@ if [[ $DRY_RUN -eq 1 ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Log-Eintrag schreiben — nur bei Problemen
+# Log-Eintrag schreiben — bei Problemen immer, im Test-Modus auch bei OK
 # ---------------------------------------------------------------------------
-if [[ $OVERALL_STATUS -ne 0 ]]; then
+if [[ $OVERALL_STATUS -ne 0 || $TEST_MODE -eq 1 ]]; then
   {
     TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[${TIMESTAMP}] FAIL  — ${HOST_COUNT} Hosts geprüft, ${#FINDINGS[@]} Problem(e):"
-    for f in "${FINDINGS[@]}"; do
-      echo "    ${f}"
-    done
+    if [[ $OVERALL_STATUS -eq 0 ]]; then
+      echo "[${TIMESTAMP}] OK    — ${HOST_COUNT} Host(s) geprüft [TEST], keine Probleme"
+    else
+      echo "[${TIMESTAMP}] FAIL  — ${HOST_COUNT} Hosts geprüft, ${#FINDINGS[@]} Problem(e):"
+      for f in "${FINDINGS[@]}"; do
+        echo "    ${f}"
+      done
+    fi
   } >> "$LOG_FILE"
 
   if [[ $(wc -l < "$LOG_FILE") -gt $MAX_LOG_LINES ]]; then
