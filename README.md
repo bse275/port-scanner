@@ -7,7 +7,7 @@ Läuft automatisch per Cron-Job auf dem Raspberry Pi und meldet Probleme an heal
 
 ## Hintergrund
 
-Unser Uplink im RZ hat **keine eigene Firewall** — jeder Port der auf einem Server offen ist, ist direkt aus dem Internet erreichbar. Dieses Script prüft regelmäßig ob das noch dem entspricht was wir erlaubt haben.
+Das RZ nutzt eine **Proxmox-Firewall** — aber der Scanner läuft von außen () und sieht genau das was auch das Internet sieht. So lässt sich prüfen ob die Firewall-Regeln korrekt greifen und ob auf Servern unerwartete Ports offen sind.
 
 Erlaubt sind grundsätzlich nur:
 - **80 / 443** — HTTP/HTTPS (alle Webserver)
@@ -147,8 +147,8 @@ Flags können kombiniert werden:
 # Fail-Alarm in healthchecks.io auslösen:
 ./scan-ports.sh --hc-fail
 
-# Kombination — Test-Hosts ohne Scan:
-./scan-ports.sh --test --dry-run
+# Kombination — Config prüfen und danach Test-Scan:
+./scan-ports.sh --test-config && ./scan-ports.sh --test
 ```
 
 Der `--test` Modus führt vor dem Scan automatisch folgende Pre-flight Checks durch:
