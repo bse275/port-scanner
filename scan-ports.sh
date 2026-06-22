@@ -62,11 +62,6 @@ if [[ $DRY_RUN -eq 1 ]]; then
   echo ""
 fi
 
-if ! command -v nmap &>/dev/null; then
-  echo "Fehler: nmap ist nicht installiert. Bitte mit 'sudo apt install nmap' nachinstallieren." >&2
-  exit 1
-fi
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/servers.conf"
 LOG_FILE="${SCRIPT_DIR}/scan-ports.log"
@@ -146,6 +141,11 @@ Datum:  $(date '+%Y-%m-%d %H:%M:%S')"
     exit 1
   fi
   exit 0
+fi
+
+if ! command -v nmap &>/dev/null; then
+  echo "Fehler: nmap ist nicht installiert. Bitte mit 'sudo apt install nmap' nachinstallieren." >&2
+  exit 1
 fi
 
 # hc.conf laden falls vorhanden
@@ -257,7 +257,7 @@ echo -e "  Bekannte Hosts:    ${#KNOWN_HOSTS[@]}"
 echo -e "  CIDR-Ranges:       ${#CIDR_RANGES[@]}"
 echo -e "  Unbekannte Hosts:  ${#UNKNOWN_HOSTS[@]}"
 
-if [[ -n "$HC_UUID" ]]; then
+if [[ -n "$HC_UUID" && $TEST_MODE -eq 0 ]]; then
   curl -fsS --retry 3 --max-time 10 "${HC_BASE}/${HC_UUID}/start" > /dev/null 2>&1 || true
 fi
 
@@ -351,11 +351,7 @@ for TARGET in "${TARGETS[@]}"; do
   fi
 
   NMAP_TMP=$(mktemp)
-  if [[ $TEST_MODE -eq 1 ]]; then
-    nmap -v --open -p 1-10000 -T4 --stats-every 30s "$TARGET" 2>&1 | tee "$NMAP_TMP"
-  else
-    nmap -v --open -p 1-10000 -T4 --stats-every 30s "$TARGET" 2>&1 | tee "$NMAP_TMP"
-  fi
+  nmap -v --open -p 1-10000 -T4 --stats-every 30s "$TARGET" 2>&1 | tee "$NMAP_TMP"
   NMAP_OUTPUT=$(cat "$NMAP_TMP")
   rm -f "$NMAP_TMP"
 
@@ -431,7 +427,7 @@ if [[ $OVERALL_STATUS -ne 0 || $TEST_MODE -eq 1 ]]; then
     if [[ $OVERALL_STATUS -eq 0 ]]; then
       echo "[${TIMESTAMP}] OK    — ${HOST_COUNT} Host(s) geprüft [TEST], keine Probleme"
     else
-      echo "[${TIMESTAMP}] FAIL  — ${HOST_COUNT} Hosts geprüft, ${#FINDINGS[@]} Problem(e):"
+      echo "[${TIMESTAMP}] FAIL  — ${HOST_COUNT} Host(s) geprüft${TEST_MODE:+ [TEST]}, ${#FINDINGS[@]} Problem(e):"
       for f in "${FINDINGS[@]}"; do
         echo "    ${f}"
       done
@@ -449,7 +445,7 @@ SCAN_DATE=$(date '+%Y-%m-%d %H:%M')
 # ---------------------------------------------------------------------------
 # healthchecks.io Ping
 # ---------------------------------------------------------------------------
-if [[ -n "$HC_UUID" ]]; then
+if [[ -n "$HC_UUID" && $TEST_MODE -eq 0 ]]; then
   if [[ $OVERALL_STATUS -eq 0 ]]; then
     curl -fsS --retry 3 --max-time 10 \
       --data-binary "$CLEAN_OUTPUT" \
