@@ -24,8 +24,10 @@ Alles andere ist ein Fund und löst eine Warnung aus.
 |---|---|
 | `scan-ports.sh` | Hauptscript — führt den Scan durch |
 | `servers.conf` | Liste aller Server mit ihren jeweils erlaubten Ports |
-| `scan-ports.log` | Wird automatisch geschrieben, max. 500 Zeilen (SD-Karte!) |
-| `.gitignore` | Hält das Log aus dem Git-Repo raus |
+| `mail.conf` | SMTP-Zugangsdaten (nicht im Repo — von `mail.conf.example` ableiten) |
+| `mail.conf.example` | Vorlage für mail.conf |
+| `scan-ports.log` | Wird nur bei Problemen beschrieben, max. 500 Zeilen (SD-Karte!) |
+| `.gitignore` | Hält Log und mail.conf aus dem Git-Repo raus |
 
 ---
 
@@ -130,14 +132,12 @@ Das Script sendet:
 
 ## Log-Datei
 
-`scan-ports.log` im gleichen Verzeichnis, wächst maximal auf 500 Zeilen:
+`scan-ports.log` im gleichen Verzeichnis — wird **nur bei Problemen** beschrieben, wächst maximal auf 500 Zeilen:
 
 ```
-[2026-06-16 06:00:01] OK    — 12 Hosts geprüft, keine Probleme
 [2026-06-17 06:00:01] FAIL  — 12 Hosts geprüft, 2 Problem(e):
     UNERLAUBTER PORT  203.0.113.2   53/tcp  open  domain
     UNBEKANNTER HOST  203.0.113.55  22/tcp  open  ssh
-[2026-06-18 06:00:01] OK    — 12 Hosts geprüft, keine Probleme
 ```
 
 ---

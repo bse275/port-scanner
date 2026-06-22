@@ -1,8 +1,27 @@
 #!/usr/bin/env bash
 # Port compliance scanner — checks servers for unexpected open ports.
-# Usage: ./scan-ports.sh [host1 host2 ...]  (ohne Argumente: liest servers.conf)
+# Usage: ./scan-ports.sh [--dry-run|-n] [--test|-t] [host1 host2 ...]  (ohne Argumente: liest servers.conf)
 
 set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Dry-Run Flag auslesen (vor allem anderen)
+# ---------------------------------------------------------------------------
+DRY_RUN=0
+TEST_MODE=0
+MAIL_TEST=0
+HC_TEST=0
+ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run|-n)  DRY_RUN=1 ;;
+    --test|-t)     TEST_MODE=1 ;;
+    --mail-test)   MAIL_TEST=1 ;;
+    --hc-test)     HC_TEST=1 ;;
+    *)             ARGS+=("$arg") ;;
+  esac
+done
+set -- "${ARGS[@]+"${ARGS[@]}"}"
 
 # ---------------------------------------------------------------------------
 # Fallback-Ports für Hosts ohne eigenen Eintrag in servers.conf
@@ -14,7 +33,7 @@ ALLOWED_PORTS=(
 )
 
 # ---------------------------------------------------------------------------
-# healthchecks.io — UUID eintragen, oder leer lassen um zu deaktivieren
+# healthchecks.io — Zugangsdaten aus hc.conf laden (optional)
 # ---------------------------------------------------------------------------
 HC_UUID=""
 HC_BASE="https://hc-ping.com"
@@ -34,6 +53,13 @@ RESET='\033[0m'
 
 # ---------------------------------------------------------------------------
 
+if [[ $DRY_RUN -eq 1 ]]; then
+  echo -e "${BOLD}${YELLOW}╔══════════════════════════════════════════════════╗${RESET}"
+  echo -e "${BOLD}${YELLOW}║  DRY-RUN MODUS — kein Scan, kein Mail, kein Log  ║${RESET}"
+  echo -e "${BOLD}${YELLOW}╚══════════════════════════════════════════════════╝${RESET}"
+  echo ""
+fi
+
 if ! command -v nmap &>/dev/null; then
   echo "Fehler: nmap ist nicht installiert. Bitte mit 'sudo apt install nmap' nachinstallieren." >&2
   exit 1
@@ -42,6 +68,79 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/servers.conf"
 LOG_FILE="${SCRIPT_DIR}/scan-ports.log"
+
+# ---------------------------------------------------------------------------
+# --mail-test: Testmail senden und beenden
+# ---------------------------------------------------------------------------
+if [[ $MAIL_TEST -eq 1 ]]; then
+  MAIL_CONF="${SCRIPT_DIR}/mail.conf"
+  if [[ ! -f "$MAIL_CONF" ]]; then
+    echo -e "${RED}Fehler: mail.conf nicht gefunden (${MAIL_CONF})${RESET}" >&2
+    echo -e "Vorlage: mail.conf.example" >&2
+    exit 1
+  fi
+  # shellcheck source=/dev/null
+  source "$MAIL_CONF"
+  echo -e "${BOLD}${CYAN}  Sende Testmail an ${MAIL_TO} ...${RESET}"
+  MAIL_TMP=$(mktemp)
+  trap 'rm -f "$MAIL_TMP"' EXIT
+  {
+    printf "From: Port Scanner <%s>\r\n" "$MAIL_FROM"
+    printf "To: %s\r\n" "$MAIL_TO"
+    printf "Subject: [Port Scanner] Testmail\r\n"
+    printf "Content-Type: text/plain; charset=utf-8\r\n"
+    printf "MIME-Version: 1.0\r\n"
+    printf "\r\n"
+    printf "Das ist eine Testmail vom Port Scanner.\r\n"
+    printf "Server: %s\r\n" "$(hostname)"
+    printf "Datum:  %s\r\n" "$(date '+%Y-%m-%d %H:%M:%S')"
+  } > "$MAIL_TMP"
+  if curl -fsS --retry 2 --max-time 30 \
+      --url "smtps://${MAIL_HOST}:${MAIL_PORT}" \
+      --user "${MAIL_USER}:${MAIL_PASS}" \
+      --mail-from "$MAIL_FROM" \
+      --mail-rcpt "$MAIL_TO" \
+      --upload-file "$MAIL_TMP"; then
+    echo -e "${GREEN}${BOLD}  ✓ Testmail erfolgreich gesendet.${RESET}"
+  else
+    echo -e "${RED}${BOLD}  ✗ Fehler beim Senden — SMTP-Zugangsdaten prüfen.${RESET}" >&2
+    exit 1
+  fi
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# --hc-test: Testping an healthchecks.io senden und beenden
+# ---------------------------------------------------------------------------
+if [[ $HC_TEST -eq 1 ]]; then
+  HC_CONF="${SCRIPT_DIR}/hc.conf"
+  if [[ ! -f "$HC_CONF" ]]; then
+    echo -e "${RED}Fehler: hc.conf nicht gefunden (${HC_CONF})${RESET}" >&2
+    echo -e "Vorlage: hc.conf.example" >&2
+    exit 1
+  fi
+  # shellcheck source=/dev/null
+  source "$HC_CONF"
+  if [[ -z "$HC_UUID" ]]; then
+    echo -e "${RED}Fehler: HC_UUID ist leer in hc.conf${RESET}" >&2
+    exit 1
+  fi
+  echo -e "${BOLD}${CYAN}  Sende Testping an healthchecks.io ...${RESET}"
+  if curl -fsS --retry 3 --max-time 10 "${HC_BASE}/${HC_UUID}" > /dev/null 2>&1; then
+    echo -e "${GREEN}${BOLD}  ✓ healthchecks.io hat geantwortet — UUID ist gültig.${RESET}"
+  else
+    echo -e "${RED}${BOLD}  ✗ Fehler — UUID oder Verbindung prüfen.${RESET}" >&2
+    exit 1
+  fi
+  exit 0
+fi
+
+# hc.conf laden falls vorhanden
+HC_CONF="${SCRIPT_DIR}/hc.conf"
+if [[ -f "$HC_CONF" ]]; then
+  # shellcheck source=/dev/null
+  source "$HC_CONF"
+fi
 
 # Alle Ausgaben in Tempfile mitschreiben (für healthchecks.io Body bei Fehler)
 TMPFILE=$(mktemp)
@@ -54,6 +153,7 @@ exec > >(tee "$TMPFILE") 2>&1
 KNOWN_HOSTS=()
 CIDR_RANGES=()
 declare -A HOST_PORTS   # HOST_PORTS["ip"] = "80,443" | "-" | "" (leer = global fallback)
+declare -A HOST_TEST    # HOST_TEST["ip"] = 1  wenn als "test" markiert
 
 if [[ $# -eq 0 ]]; then
   if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -64,11 +164,13 @@ if [[ $# -eq 0 ]]; then
   while IFS= read -r line; do
     host=$(echo "$line" | awk '{print $1}')
     ports=$(echo "$line" | awk '{print $2}')
+    flag=$(echo "$line" | awk '{print $3}')
     if [[ "$host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
       CIDR_RANGES+=("$host")
     else
       KNOWN_HOSTS+=("$host")
       HOST_PORTS["$host"]="${ports:-"-"}"
+      [[ "$flag" == "test" ]] && HOST_TEST["$host"]=1
     fi
   done < <(grep -v '^\s*#' "$CONFIG_FILE" | grep -v '^\s*$')
 
@@ -88,6 +190,10 @@ UNKNOWN_HOSTS=()
 for CIDR in "${CIDR_RANGES[@]}"; do
   echo ""
   echo -e "${BOLD}${YELLOW}  Discovery-Scan: ${CIDR}${RESET}"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo -e "  ${YELLOW}[DRY-RUN] Discovery-Scan übersprungen.${RESET}"
+    continue
+  fi
   while IFS= read -r ip; do
     is_known=0
     for known in "${KNOWN_HOSTS[@]}"; do
@@ -105,11 +211,28 @@ done
 
 # ---------------------------------------------------------------------------
 # Scan-Ziele zusammenstellen: bekannte + unbekannte Hosts
+# Im Test-Modus: nur als "test" markierte Hosts
 # ---------------------------------------------------------------------------
-TARGETS=("${KNOWN_HOSTS[@]}")
-for h in "${UNKNOWN_HOSTS[@]}"; do
-  TARGETS+=("$h")
-done
+TARGETS=()
+if [[ $TEST_MODE -eq 1 ]]; then
+  for h in "${KNOWN_HOSTS[@]}"; do
+    [[ -v HOST_TEST[$h] ]] && TARGETS+=("$h")
+  done
+  if [[ ${#TARGETS[@]} -eq 0 ]]; then
+    echo -e "${RED}Fehler: Keine Test-Hosts in servers.conf gefunden (dritte Spalte: 'test').${RESET}" >&2
+    exit 1
+  fi
+  echo -e "${BOLD}${YELLOW}  TEST-MODUS — nur markierte Hosts:${RESET}"
+  for h in "${TARGETS[@]}"; do
+    echo -e "  ${CYAN}→ ${h}${RESET}"
+  done
+  echo ""
+else
+  TARGETS=("${KNOWN_HOSTS[@]}")
+  for h in "${UNKNOWN_HOSTS[@]}"; do
+    TARGETS+=("$h")
+  done
+fi
 
 declare -A UNKNOWN_SET
 for h in "${UNKNOWN_HOSTS[@]}"; do
@@ -208,6 +331,12 @@ for TARGET in "${TARGETS[@]}"; do
   fi
   echo ""
 
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo -e "  ${YELLOW}[DRY-RUN] nmap-Scan übersprungen.${RESET}"
+    echo ""
+    continue
+  fi
+
   NMAP_OUTPUT=$(nmap -sV --open -p 1-10000 -T4 "$TARGET" 2>&1)
 
   if echo "$NMAP_OUTPUT" | grep -q "Host seems down"; then
@@ -265,22 +394,29 @@ echo -e "${BOLD}${CYAN}═══════════════════
 echo ""
 
 # ---------------------------------------------------------------------------
-# Log-Eintrag schreiben
+# Log, Notifications — im Dry-Run alles überspringen
 # ---------------------------------------------------------------------------
-{
-  TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-  if [[ $OVERALL_STATUS -eq 0 ]]; then
-    echo "[${TIMESTAMP}] OK    — ${HOST_COUNT} Hosts geprüft, keine Probleme"
-  else
+if [[ $DRY_RUN -eq 1 ]]; then
+  echo -e "${BOLD}${YELLOW}  [DRY-RUN] Kein Log-Eintrag, kein Mail, kein healthchecks.io Ping.${RESET}"
+  echo ""
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Log-Eintrag schreiben — nur bei Problemen
+# ---------------------------------------------------------------------------
+if [[ $OVERALL_STATUS -ne 0 ]]; then
+  {
+    TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
     echo "[${TIMESTAMP}] FAIL  — ${HOST_COUNT} Hosts geprüft, ${#FINDINGS[@]} Problem(e):"
     for f in "${FINDINGS[@]}"; do
       echo "    ${f}"
     done
-  fi
-} >> "$LOG_FILE"
+  } >> "$LOG_FILE"
 
-if [[ $(wc -l < "$LOG_FILE") -gt $MAX_LOG_LINES ]]; then
-  tail -n "$MAX_LOG_LINES" "$LOG_FILE" > "${LOG_FILE}.tmp" && mv "${LOG_FILE}.tmp" "$LOG_FILE"
+  if [[ $(wc -l < "$LOG_FILE") -gt $MAX_LOG_LINES ]]; then
+    tail -n "$MAX_LOG_LINES" "$LOG_FILE" > "${LOG_FILE}.tmp" && mv "${LOG_FILE}.tmp" "$LOG_FILE"
+  fi
 fi
 
 CLEAN_OUTPUT=$(sed 's/\x1B\[[0-9;]*[mK]//g' "$TMPFILE")

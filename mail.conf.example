@@ -1,0 +1,6 @@
+MAIL_HOST="smtp.example.com"
+MAIL_PORT="465"
+MAIL_USER="scanner@example.com"
+MAIL_PASS="passwort"
+MAIL_FROM="scanner@example.com"   # muss eine gültige E-Mail-Adresse sein
+MAIL_TO="admin@example.com"

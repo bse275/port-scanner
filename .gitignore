@@ -1,3 +1,4 @@
 scan-ports.log
 mail.conf
+hc.conf
 *.tmp
