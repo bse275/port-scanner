@@ -2,3 +2,5 @@ scan-ports.log
 mail.conf
 hc.conf
 *.tmp
+.DS_Store
+.lh/
