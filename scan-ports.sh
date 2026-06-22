@@ -354,7 +354,7 @@ for TARGET in "${TARGETS[@]}"; do
   if [[ $TEST_MODE -eq 1 ]]; then
     nmap -v --open -p 1-10000 -T4 --stats-every 30s "$TARGET" 2>&1 | tee "$NMAP_TMP"
   else
-    nmap -v -sV --open -p 1-10000 -T4 --stats-every 30s "$TARGET" 2>&1 | tee "$NMAP_TMP"
+    nmap -v --open -p 1-10000 -T4 --stats-every 30s "$TARGET" 2>&1 | tee "$NMAP_TMP"
   fi
   NMAP_OUTPUT=$(cat "$NMAP_TMP")
   rm -f "$NMAP_TMP"
