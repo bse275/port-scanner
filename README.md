@@ -7,7 +7,7 @@ Läuft automatisch per Cron-Job auf dem Raspberry Pi und meldet Probleme an heal
 
 ## Hintergrund
 
-Das RZ nutzt eine **Proxmox-Firewall** — aber der Scanner läuft von außen () und sieht genau das was auch das Internet sieht. So lässt sich prüfen ob die Firewall-Regeln korrekt greifen und ob auf Servern unerwartete Ports offen sind.
+Die Netzwerk-Infrastruktur (Routing, Switching, VPN) wird über **MikroTik**-Geräte abgesichert. Auf VM-Ebene greift die **Proxmox-Firewall**. Der Scanner läuft von außen () und sieht genau was das Internet sieht — so lässt sich prüfen ob beide Ebenen korrekt greifen und keine unerwarteten Ports offen sind.
 
 Erlaubt sind grundsätzlich nur:
 - **80 / 443** — HTTP/HTTPS (alle Webserver)
