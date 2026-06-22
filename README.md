@@ -26,8 +26,10 @@ Alles andere ist ein Fund und löst eine Warnung aus.
 | `servers.conf` | Liste aller Server mit ihren jeweils erlaubten Ports |
 | `mail.conf` | SMTP-Zugangsdaten (nicht im Repo — von `mail.conf.example` ableiten) |
 | `mail.conf.example` | Vorlage für mail.conf |
+| `hc.conf` | healthchecks.io UUID (nicht im Repo — von `hc.conf.example` ableiten) |
+| `hc.conf.example` | Vorlage für hc.conf |
 | `scan-ports.log` | Wird nur bei Problemen beschrieben, max. 500 Zeilen (SD-Karte!) |
-| `.gitignore` | Hält Log und mail.conf aus dem Git-Repo raus |
+| `.gitignore` | Hält Log, mail.conf und hc.conf aus dem Git-Repo raus |
 
 ---
 
@@ -36,11 +38,11 @@ Alles andere ist ein Fund und löst eine Warnung aus.
 Jede Zeile definiert einen Server und seine erlaubten Ports:
 
 ```
-# IP               Erlaubte Ports        Kommentar
-203.0.113.20      80,443                # docker — nur Web
-203.0.113.35      80,443,25,465,587,143,993,110,995,4190   # Mailserver
-203.0.113.30      -                     # postgres — darf gar nichts offen haben
-203.0.113.40      9876                  # Bastion — nur SSH
+# IP               Erlaubte Ports        Flag    Kommentar
+203.0.113.20      80,443                        # docker — nur Web
+203.0.113.35      80,443,25,465,...      test   # Mailserver — Test-Host
+203.0.113.30      -                             # postgres — darf gar nichts offen haben
+203.0.113.40      9876                          # Bastion — nur SSH
 ```
 
 **Bedeutung der Port-Spalte:**
@@ -50,6 +52,8 @@ Jede Zeile definiert einen Server und seine erlaubten Ports:
 | `80,443` | Nur diese Ports sind erlaubt |
 | `-` | Kein einziger Port darf offen sein |
 | *(leer)* | Wie `-` — kein Port erlaubt (deny by default) |
+
+**Dritte Spalte `test`** — markiert einen Host als Test-Host für `--test` Modus (schneller Einzelscan ohne Discovery).
 
 **CIDR-Zeilen** (z.B. `203.0.113.0/26`) lösen zusätzlich einen Discovery-Scan aus:  
 Alle aktiven Hosts im Subnetz werden gefunden. Hosts die **nicht** in der Liste stehen werden als **UNBEKANNTER HOST** markiert — das ist ein Fund. Damit fällt z.B. eine vergessene Test-VM auf.
@@ -65,18 +69,23 @@ Ohne diese Zeile würde der Server beim nächsten Scan als "unbekannter Host" au
 
 ---
 
-## scan-ports.sh — Einstellungen
+## Einstellungen
 
-Am Anfang des Scripts gibt es zwei Stellen zum Anpassen:
-
-**healthchecks.io UUID** (Zeile ~27):
-```bash
-HC_UUID=""   # UUID von healthchecks.io eintragen
-```
-
-**Log-Größe** (Zeile ~33) — aktuell 500 Zeilen (~1,5 Jahre bei täglichem Scan:
+**Log-Größe** — aktuell 500 Zeilen (~1,5 Jahre bei täglichem Scan):
 ```bash
 MAX_LOG_LINES=500
+```
+
+**mail.conf** — SMTP-Zugangsdaten für Mail-Benachrichtigung:
+```bash
+cp mail.conf.example mail.conf
+# Zugangsdaten eintragen
+```
+
+**hc.conf** — healthchecks.io UUID:
+```bash
+cp hc.conf.example hc.conf
+# UUID eintragen
 ```
 
 ---
@@ -94,7 +103,7 @@ MAX_LOG_LINES=500
 ./scan-ports.sh 203.0.113.20 203.0.113.35
 ```
 
-Ein Scan aller Server dauert je nach Antwortverhalten der Hosts ca. **15–40 Minuten**.
+Ein Scan aller Server dauert auf dem Pi ca. **20–30 Minuten**.
 
 ---
 
@@ -103,7 +112,7 @@ Ein Scan aller Server dauert je nach Antwortverhalten der Hosts ca. **15–40 Mi
 | Flag | Beschreibung |
 |---|---|
 | `--dry-run` / `-n` | Config einlesen und anzeigen, kein Scan, kein Mail, kein Log |
-| `--test` / `-t` | Nur als `test` markierte Hosts in servers.conf scannen |
+| `--test` / `-t` | Nur als `test` markierte Hosts scannen, inkl. Pre-flight Checks |
 | `--mail-test` | Testmail senden und beenden (braucht mail.conf) |
 | `--hc-test` | Testping an healthchecks.io senden und beenden (braucht hc.conf) |
 | `--hc-fail` | Fail-Ping an healthchecks.io simulieren (braucht hc.conf) |
@@ -114,7 +123,7 @@ Flags können kombiniert werden:
 # Config prüfen ohne zu scannen:
 ./scan-ports.sh --dry-run
 
-# Nur Test-Hosts scannen (schnell):
+# Nur Test-Hosts scannen (schnell, inkl. Pre-flight Checks):
 ./scan-ports.sh --test
 
 # Mail-Versand testen:
@@ -130,6 +139,11 @@ Flags können kombiniert werden:
 ./scan-ports.sh --test --dry-run
 ```
 
+Der `--test` Modus führt vor dem Scan automatisch folgende Pre-flight Checks durch:
+1. Internet erreichbar? (Ping 8.8.8.8)
+2. DNS + healthchecks.io erreichbar?
+3. Test-Host(s) erreichbar?
+
 ---
 
 ## Automatischer Betrieb (Cron)
@@ -138,9 +152,9 @@ Flags können kombiniert werden:
 crontab -e
 ```
 
-Beispiel: täglich um 06:00 Uhr:
+Beispiel: täglich um 02:00 Uhr nachts:
 ```
-0 6 * * * /home/benny/port-scanner/scan-ports.sh
+0 2 * * * /home/benny/port-scanner/scan-ports.sh
 ```
 
 ---
@@ -153,23 +167,30 @@ healthchecks.io ist ein kostenloser Dienst der Alarm schlägt wenn ein Job **nic
 2. Neuen Check anlegen:
    - **Period:** 24 hours (oder wie oft der Cron-Job läuft)
    - **Grace Time:** 90 Minuten (Puffer für die Scan-Dauer)
-3. Die UUID aus der Check-URL kopieren und in `scan-ports.sh` eintragen
+3. Die UUID aus der Check-URL kopieren und in `hc.conf` eintragen
 4. Alarmierung per E-Mail, Slack, etc. konfigurieren
 
 Das Script sendet:
 - `/start` — wenn der Job beginnt
-- Erfolgs-Ping mit Scan-Log — wenn alles OK
-- `/fail` mit Scan-Log — wenn unerlaubte Ports gefunden wurden
+- Erfolgs-Ping mit Scan-Output — wenn alles OK
+- `/fail` mit Scan-Output — wenn unerlaubte Ports gefunden wurden
 - Kein Ping — wenn der Raspberry Pi oder das Script selbst ausgefallen ist → healthchecks.io meldet das nach der Grace Time
+
+> Im `--test` Modus werden **keine** Pings an healthchecks.io gesendet.
 
 ---
 
 ## Log-Datei
 
-`scan-ports.log` im gleichen Verzeichnis — wird **nur bei Problemen** beschrieben, wächst maximal auf 500 Zeilen:
+`scan-ports.log` im gleichen Verzeichnis:
+- **Normalbetrieb:** nur bei Problemen (FAIL)
+- **`--test` Modus:** immer, auch bei OK (mit `[TEST]` Markierung)
+
+Wächst maximal auf 500 Zeilen:
 
 ```
-[2026-06-17 06:00:01] FAIL  — 12 Hosts geprüft, 2 Problem(e):
+[2026-06-22 02:00:01] OK    — 1 Host(s) geprüft [TEST], keine Probleme
+[2026-06-23 02:00:01] FAIL  — 13 Host(s) geprüft, 2 Problem(e):
     UNERLAUBTER PORT  203.0.113.2   53/tcp  open  domain
     UNBEKANNTER HOST  203.0.113.55  22/tcp  open  ssh
 ```
@@ -187,7 +208,7 @@ git commit -m "Kurze Beschreibung"
 git push
 ```
 
-> `scan-ports.log` ist in `.gitignore` — wird nie ins Repo eingecheckt.
+> `scan-ports.log`, `mail.conf` und `hc.conf` sind in `.gitignore` — werden nie ins Repo eingecheckt.
 
 ---
 
