@@ -343,7 +343,7 @@ if [[ $TEST_MODE -eq 1 ]]; then
   fi
 
   # 2. DNS + healthchecks.io
-  HC_HOST=$(echo "$HC_BASE" | sed 's|https\?://||')
+  HC_HOST="${HC_BASE#*://}"
   if $_PING "$HC_HOST" &>/dev/null; then
     echo -e "  ${GREEN}✓ DNS funktioniert, ${HC_HOST} erreichbar${RESET}"
   else
