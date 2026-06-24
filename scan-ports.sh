@@ -349,9 +349,6 @@ for CIDR in "${CIDR_RANGES[@]}"; do
     fi
   done < <(nmap -sn -PS80,443,25,9876 "$CIDR" -oG - 2>/dev/null \
     | grep "^Host:" | awk '{print $2}')
-  if [[ ${#UNKNOWN_HOSTS[@]} -gt 0 ]]; then
-    echo -e "  ${YELLOW}⚠ ${#UNKNOWN_HOSTS[@]} unbekannte Host(s) im Subnetz — werden geprüft${RESET}"
-  fi
 done
 
 # ---------------------------------------------------------------------------
@@ -389,7 +386,6 @@ done
 echo ""
 echo -e "  Bekannte Hosts:    ${#KNOWN_HOSTS[@]}"
 echo -e "  CIDR-Ranges:       ${#CIDR_RANGES[@]}"
-echo -e "  Unbekannte Hosts:  ${#UNKNOWN_HOSTS[@]}"
 
 if [[ -n "$HC_UUID" && $TEST_MODE -eq 0 && "$HC_ENABLED" == "true" ]]; then
   curl -fsS --retry 3 --max-time 10 "${HC_BASE}/${HC_UUID}/start" > /dev/null 2>&1 || true
@@ -505,6 +501,7 @@ for TARGET in "${TARGETS[@]}"; do
     if ! nmap -sn -PS80,443,25,9876 "$TARGET" 2>/dev/null | grep -q "Host is up"; then
       continue
     fi
+    echo -e "  ${RED}${BOLD}⚠ Echter unbekannter Host gefunden: ${TARGET}${RESET}"
   fi
 
   (( HOST_COUNT++ )) || true
