@@ -677,4 +677,10 @@ else
   send_mail "${MAIL_PREFIX} FAIL - ${#FINDINGS[@]} Problem(e) gefunden, ${SCAN_DATE}" "$MAIL_BODY"
 fi
 
+BLACKLIST_SCRIPT="${SCRIPT_DIR}/check-blacklist.sh"
+if [[ -f "$BLACKLIST_SCRIPT" && $TEST_MODE -eq 0 ]]; then
+  echo ""
+  bash "$BLACKLIST_SCRIPT" "${UNKNOWN_HOSTS[@]+"${UNKNOWN_HOSTS[@]}"}"
+fi
+
 exit $OVERALL_STATUS

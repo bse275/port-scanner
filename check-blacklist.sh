@@ -10,11 +10,15 @@ set -euo pipefail
 TEST_CONFIG=0
 MAIL_TEST=0
 DRY_RUN=0
+EXTRA_IPS=()
 for arg in "$@"; do
   case "$arg" in
     --test-config) TEST_CONFIG=1 ;;
     --mail-test)   MAIL_TEST=1 ;;
     --dry-run)     DRY_RUN=1 ;;
+    *)
+      [[ "$arg" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && EXTRA_IPS+=("$arg")
+      ;;
   esac
 done
 
@@ -184,6 +188,11 @@ while IFS= read -r line; do
   PUBLIC_IPS+=("$ip")
   IP_COMMENT["$ip"]=$(echo "$line" | sed 's/^[^#]*#//' | xargs 2>/dev/null || true)
 done < <(grep -v '^\s*#' "$CONFIG_FILE" | grep -v '^\s*$')
+
+for ip in "${EXTRA_IPS[@]}"; do
+  PUBLIC_IPS+=("$ip")
+  IP_COMMENT["$ip"]="unbekannter Host"
+done
 
 if [[ ${#PUBLIC_IPS[@]} -eq 0 ]]; then
   echo "Keine öffentlichen IPs in servers.conf gefunden." >&2
