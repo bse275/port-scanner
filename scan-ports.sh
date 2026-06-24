@@ -161,6 +161,7 @@ KNOWN_HOSTS=()
 CIDR_RANGES=()
 declare -A HOST_PORTS   # HOST_PORTS["ip"] = "80,443" | "-" | "" (leer = global fallback)
 declare -A HOST_TEST    # HOST_TEST["ip"] = 1  wenn als "test" markiert
+declare -A HOST_SKIP    # HOST_SKIP["ip"] = 1  wenn als "skip" markiert (bekannt, kein Scan)
 
 if [[ $# -eq 0 ]]; then
   if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -178,6 +179,7 @@ if [[ $# -eq 0 ]]; then
       KNOWN_HOSTS+=("$host")
       HOST_PORTS["$host"]="${ports:-"-"}"
       [[ "$flag" == "test" ]] && HOST_TEST["$host"]=1
+      [[ "$flag" == "skip" ]] && HOST_SKIP["$host"]=1
     fi
   done < <(grep -v '^\s*#' "$CONFIG_FILE" | grep -v '^\s*$')
 
@@ -245,13 +247,14 @@ if [[ $TEST_CONFIG -eq 1 ]]; then
       fi
 
       # Flag prüfen
-      if [[ -n "$flag" && "$flag" != "test" ]]; then
-        echo -e "  ${RED}✗ Zeile ${LINE_NUM}: Unbekannter Flag '${flag}' bei Host ${host} (erlaubt: 'test')${RESET}"
+      if [[ -n "$flag" && "$flag" != "test" && "$flag" != "skip" ]]; then
+        echo -e "  ${RED}✗ Zeile ${LINE_NUM}: Unbekannter Flag '${flag}' bei Host ${host} (erlaubt: 'test', 'skip')${RESET}"
         CONFIG_OK=1
       fi
 
       TEST_MARKER=""
       [[ "$flag" == "test" ]] && TEST_MARKER=" ${YELLOW}[test]${RESET}"
+      [[ "$flag" == "skip" ]] && TEST_MARKER=" ${YELLOW}[skip]${RESET}"
       [[ $PORT_OK -eq 1 ]] && echo -e "  ${GREEN}✓ ${host}  ${ports:-"-"}${TEST_MARKER}${RESET}"
 
     done < <(grep -v '^\s*#' "$CONFIG_FILE" | grep -v '^\s*$')
@@ -368,7 +371,9 @@ if [[ $TEST_MODE -eq 1 ]]; then
   done
   echo ""
 else
-  TARGETS=("${KNOWN_HOSTS[@]}")
+  for h in "${KNOWN_HOSTS[@]}"; do
+    [[ -v HOST_SKIP[$h] ]] || TARGETS+=("$h")
+  done
   for h in "${UNKNOWN_HOSTS[@]}"; do
     TARGETS+=("$h")
   done
