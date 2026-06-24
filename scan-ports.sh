@@ -609,7 +609,9 @@ if [[ $OVERALL_STATUS -ne 0 || $TEST_MODE -eq 1 ]]; then
   fi
 fi
 
-CLEAN_OUTPUT=$(sed 's/\x1B\[[0-9;]*[mK]//g' "$TMPFILE")
+CLEAN_OUTPUT=$(sed 's/\x1B\[[0-9;]*[mK]//g' "$TMPFILE" \
+  | grep -v '^Connect Scan Timing:' \
+  | grep -v '^Stats: ')
 SCAN_DATE=$(date '+%Y-%m-%d %H:%M')
 
 # ---------------------------------------------------------------------------
