@@ -20,18 +20,76 @@ Alles andere ist ein Fund und löst eine Warnung aus.
 
 ---
 
+## DNS-Rekursionsprüfung
+
+Wird bei einem Host **Port 53 (DNS) offen** gefunden, prüft der Scanner automatisch ob der Server als **offener rekursiver Resolver** betrieben wird — d.h. ob er DNS-Anfragen für beliebige externe Domains beantwortet.
+
+Ein offener Resolver ist ein ernstes Sicherheitsproblem:
+- Er kann für **DNS-Amplification-Angriffe** missbraucht werden (DDoS-Verstärker)
+- Er verstößt gegen Best Practices und führt oft zur Aufnahme in Blacklists
+
+**Verhalten des Scanners:**
+
+| Befund | Ausgabe | Wirkung |
+|---|---|---|
+| Port 53 offen, Rekursion festgestellt | `⚠ OFFENER REKURSIVER DNS` (rot) | FINDINGS + Mail + HC-Fail |
+| Port 53 offen, keine Rekursion | `⚠ DNS-Port 53 offen — keine externe Rekursion` (gelb) | nur Hinweis |
+| Port 53 offen, dig/nslookup fehlt | `⚠ Rekursionsprüfung übersprungen` (gelb) | nur Hinweis |
+
+Die Prüfung erfolgt zusätzlich zur normalen Portbewertung — Port 53 kann also gleichzeitig als **unerlaubt** und als **rekursiver Resolver** gemeldet werden.
+
+**Voraussetzung:** `dig` aus dem Paket `dnsutils` (Fallback: `nslookup`):
+```bash
+sudo apt install dnsutils
+```
+
+---
+
+## Blacklist-Check
+
+Nach jedem Port-Scan startet `scan-ports.sh` automatisch `check-blacklist.sh`. Das Script prüft alle öffentlichen IPs aus `servers.conf` (Hosts mit Ports ≠ `-`) sowie alle im CIDR-Scan neu entdeckten unbekannten Hosts gegen gängige **DNSBL-Blacklists**:
+
+| DNSBL | Schwerpunkt |
+|---|---|
+| `zen.spamhaus.org` | Spam, Exploits, Botnets, dynamische IPs |
+| `bl.spamcop.net` | Spam-Quellen |
+| `dnsbl.sorbs.net` | Spam + offene Proxies |
+| `b.barracudacentral.org` | Spam-Quellen |
+| `dnsbl-1.uceprotect.net` | Spam-Quellen |
+| `psbl.surriel.com` | Passive Spam-Blockliste |
+| `spam.dnsbl.sorbs.net` | SORBS Spam-spezifisch |
+
+Bei einem Treffer wird eine Mail verschickt. Das Script kann auch eigenständig ausgeführt werden:
+
+```bash
+# Manueller Blacklist-Check:
+./check-blacklist.sh
+
+# Dry-Run — kein Mailversand:
+./check-blacklist.sh --dry-run
+
+# Config prüfen:
+./check-blacklist.sh --test-config
+```
+
+> Im `--test` Modus von `scan-ports.sh` wird `check-blacklist.sh` **nicht** gestartet.
+
+---
+
 ## Dateien
 
 | Datei | Zweck |
 |---|---|
-| `scan-ports.sh` | Hauptscript — führt den Scan durch |
+| `scan-ports.sh` | Hauptscript — führt den Port-Scan durch, startet danach `check-blacklist.sh` |
+| `check-blacklist.sh` | Prüft alle öffentlichen IPs gegen DNSBL-Blacklists |
 | `servers.conf` | Liste aller Server mit ihren jeweils erlaubten Ports |
 | `mail.conf` | SMTP-Zugangsdaten (nicht im Repo — von `mail.conf.example` ableiten) |
 | `mail.conf.example` | Vorlage für mail.conf |
 | `hc.conf` | healthchecks.io UUID (nicht im Repo — von `hc.conf.example` ableiten) |
 | `hc.conf.example` | Vorlage für hc.conf |
 | `scan-ports.log` | Wird nur bei Problemen beschrieben, max. 500 Zeilen (SD-Karte!) |
-| `.gitignore` | Hält Log, mail.conf und hc.conf aus dem Git-Repo raus |
+| `check-blacklist.log` | Protokoll der Blacklist-Checks, max. 200 Zeilen |
+| `.gitignore` | Hält Logs, mail.conf und hc.conf aus dem Git-Repo raus |
 
 ---
 
@@ -68,9 +126,10 @@ Alle aktiven Hosts im Subnetz werden gefunden. Hosts die **nicht** in der Liste 
 
 | Situation | Verhalten |
 |---|---|
-| Unbekannte IP, antwortet nicht | still ignoriert |
-| Unbekannte IP, antwortet, keine Ports offen | ⚠ Hinweis — Mail + HC-Fail |
-| Unbekannte IP, antwortet, Ports offen | ✗ ALARM — Mail + HC-Fail |
+| Unbekannte IP, keine offenen Ports | still ignoriert |
+| Unbekannte IP, offene Ports gefunden | ✗ ALARM — Mail + HC-Fail + Blacklist-Check |
+
+Der Discovery-Scan verwendet `--open` — IPs ohne echte OPEN-Ports (z.B. reine RST-Antworten des Routers) werden nie als "unbekannt" gemeldet.
 
 ### Neuen Server hinzufügen
 
@@ -204,9 +263,10 @@ Wächst maximal auf 500 Zeilen:
 
 ```
 [2026-06-22 02:00:01] OK    — 1 Host(s) geprüft [TEST], keine Probleme
-[2026-06-23 02:00:01] FAIL  — 13 Host(s) geprüft, 2 Problem(e):
-    UNERLAUBTER PORT  203.0.113.2   53/tcp  open  domain
-    UNBEKANNTER HOST  203.0.113.55  22/tcp  open  ssh
+[2026-06-23 02:00:01] FAIL  — 13 Host(s) geprüft, 3 Problem(e):
+    UNERLAUBTER PORT       203.0.113.2   53/tcp  open  domain
+    OFFENER REKURSIVER DNS 203.0.113.2   (löst externe Domains auf — DNS-Amplification-Risiko)
+    UNBEKANNTER HOST       203.0.113.55  22/tcp  open  ssh
 ```
 
 ---
@@ -230,4 +290,5 @@ git push
 
 - `nmap` — `sudo apt install nmap`
 - `curl` — üblicherweise vorinstalliert
+- `dig` — `sudo apt install dnsutils` (für DNS-Rekursionsprüfung und Blacklist-Check; Fallback für Rekursionsprüfung: `nslookup`)
 - Raspberry Pi (oder beliebiger Linux-Rechner) mit Internetzugang Richtung RZ
