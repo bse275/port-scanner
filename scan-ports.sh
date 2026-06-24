@@ -415,6 +415,29 @@ is_allowed() {
   fi
 }
 
+check_dns_recursive() {
+  local host="$1"
+  local result
+  if command -v dig &>/dev/null; then
+    result=$(dig @"$host" google.com A +short +time=3 +tries=1 2>/dev/null || true)
+  elif command -v nslookup &>/dev/null; then
+    result=$(nslookup -timeout=3 google.com "$host" 2>/dev/null \
+      | awk '/^Address: / && !/^Address: '"$host"'/ {print}' || true)
+  else
+    echo -e "  ${YELLOW}⚠ DNS-Port 53 offen — Rekursionsprüfung übersprungen (dig/nslookup fehlt)${RESET}"
+    return
+  fi
+  if [[ -n "$result" ]]; then
+    echo -e "  ${RED}${BOLD}  ⚠ OFFENER REKURSIVER DNS: ${host} löst externe Domains auf!${RESET}"
+    echo -e "  ${RED}    Risiko: DNS-Amplification / offener Resolver${RESET}"
+    FINDINGS+=("OFFENER REKURSIVER DNS  ${host}  (löst externe Domains auf — DNS-Amplification-Risiko)")
+    HOST_STATUS=1
+    OVERALL_STATUS=1
+  else
+    echo -e "  ${YELLOW}⚠ DNS-Port 53 offen — keine externe Rekursion festgestellt.${RESET}"
+  fi
+}
+
 send_mail() {
   local subject="$1"
   local body="$2"
@@ -567,6 +590,7 @@ for TARGET in "${TARGETS[@]}"; do
       HOST_STATUS=1
       OVERALL_STATUS=1
     fi
+    [[ "$PORT" == "53" ]] && check_dns_recursive "$TARGET"
   done <<< "$OPEN_PORTS"
 
   echo ""
