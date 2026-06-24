@@ -501,7 +501,7 @@ for TARGET in "${TARGETS[@]}"; do
     if ! nmap -sn -PS80,443,25,9876 "$TARGET" 2>/dev/null | grep -q "Host is up"; then
       continue
     fi
-    echo -e "  ${RED}${BOLD}⚠ Echter unbekannter Host gefunden: ${TARGET}${RESET}"
+    echo -e "  ${RED}${BOLD}⚠ Unbekannter Host gefunden: ${TARGET}${RESET}"
   fi
 
   (( HOST_COUNT++ )) || true
