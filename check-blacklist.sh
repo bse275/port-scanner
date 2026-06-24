@@ -267,8 +267,13 @@ if [[ $OVERALL_STATUS -eq 0 ]]; then
 else
   echo -e "${BOLD}${RED}  ✗ ${#FINDINGS[@]} Blacklist-Treffer gefunden!${RESET}"
   echo ""
+  printf "  ${BOLD}%-18s  %-32s  %s${RESET}\n" "IP" "DNSBL" "Ergebnis"
+  printf "  %s\n" "$(printf '─%.0s' {1..72})"
   for f in "${FINDINGS[@]}"; do
-    echo -e "  ${RED}→ ${f}${RESET}"
+    F_IP=$(awk -F'  [|]  ' '{print $1}' <<< "$f")
+    F_DNSBL=$(awk -F'  [|]  ' '{print $2}' <<< "$f")
+    F_RESULT=$(awk -F'  [|]  ' '{print $3}' <<< "$f")
+    printf "  ${RED}%-18s  %-32s  %s${RESET}\n" "$F_IP" "$F_DNSBL" "$F_RESULT"
   done
 fi
 echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
@@ -277,14 +282,24 @@ echo -e "${BOLD}${CYAN}═══════════════════
 # Mail bei Treffern
 # ---------------------------------------------------------------------------
 if [[ $OVERALL_STATUS -ne 0 && $DRY_RUN -eq 0 ]]; then
+  _BL_HEADER=$(printf '  %-18s  %-32s  %s\n' 'IP' 'DNSBL' 'Ergebnis')
+  _BL_SEP="  $(printf '─%.0s' {1..72})"
+  _BL_ROWS=""
+  for f in "${FINDINGS[@]}"; do
+    F_IP=$(awk -F'  [|]  ' '{print $1}' <<< "$f")
+    F_DNSBL=$(awk -F'  [|]  ' '{print $2}' <<< "$f")
+    F_RESULT=$(awk -F'  [|]  ' '{print $3}' <<< "$f")
+    _BL_ROWS+="$(printf '  %-18s  %-32s  %s\n' "$F_IP" "$F_DNSBL" "$F_RESULT")"
+  done
   MAIL_BODY="Blacklist-Check: ${#FINDINGS[@]} Treffer gefunden!
 
 Server: $(hostname)
 Datum:  $(date '+%Y-%m-%d %H:%M:%S')
 
 Treffer:
-$(printf '  %s\n' "${FINDINGS[@]}")
-
+${_BL_HEADER}
+${_BL_SEP}
+${_BL_ROWS}
 Bitte sofort prüfen und ggf. Delisting beantragen.
 Spamhaus:   https://www.spamhaus.org/lookup/
 Barracuda:  https://www.barracudacentral.org/lookups

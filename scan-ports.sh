@@ -603,7 +603,16 @@ echo -e "${BOLD}${CYAN}═══════════════════
 if [[ $OVERALL_STATUS -eq 0 ]]; then
   echo -e "${GREEN}${BOLD}  Ergebnis: Alle Server OK — keine unerlaubten Ports.${RESET}"
 else
-  echo -e "${RED}${BOLD}  Ergebnis: ACHTUNG — Probleme gefunden!${RESET}"
+  echo -e "${RED}${BOLD}  Ergebnis: ACHTUNG — ${#FINDINGS[@]} Problem(e) gefunden!${RESET}"
+  echo ""
+  printf "  ${BOLD}%-24s  %-22s  %s${RESET}\n" "Art" "Host" "Detail"
+  printf "  %s\n" "$(printf '─%.0s' {1..70})"
+  for f in "${FINDINGS[@]}"; do
+    F_TYPE=$(awk -F'  ' '{print $1}' <<< "$f")
+    F_HOST=$(awk -F'  ' '{print $2}' <<< "$f")
+    F_DETAIL=$(awk -F'  ' '{for(i=3;i<=NF;i++) printf "%s%s",$i,(i<NF?"  ":""); print ""}' <<< "$f")
+    printf "  ${RED}%-24s  %-22s  %s${RESET}\n" "$F_TYPE" "$F_HOST" "$F_DETAIL"
+  done
 fi
 echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
 echo ""
@@ -660,15 +669,22 @@ fi
 
 MAIL_BODY="$CLEAN_OUTPUT"
 if [[ $OVERALL_STATUS -ne 0 && ${#FINDINGS[@]} -gt 0 ]]; then
-  MAIL_BODY+="
-$(printf '═%.0s' {1..50})
- Zusammenfassung — ${#FINDINGS[@]} Problem(e)
-$(printf '═%.0s' {1..50})
-"
+  _TBL_HEADER=$(printf '  %-24s  %-22s  %s\n' 'Art' 'Host' 'Detail')
+  _TBL_SEP="  $(printf '─%.0s' {1..70})"
+  _TBL_ROWS=""
   for f in "${FINDINGS[@]}"; do
-    MAIL_BODY+="  ${f}
-"
+    F_TYPE=$(awk -F'  ' '{print $1}' <<< "$f")
+    F_HOST=$(awk -F'  ' '{print $2}' <<< "$f")
+    F_DETAIL=$(awk -F'  ' '{for(i=3;i<=NF;i++) printf "%s%s",$i,(i<NF?"  ":""); print ""}' <<< "$f")
+    _TBL_ROWS+="$(printf '  %-24s  %-22s  %s\n' "$F_TYPE" "$F_HOST" "$F_DETAIL")"
   done
+  MAIL_BODY+="
+$(printf '═%.0s' {1..70})
+ Zusammenfassung — ${#FINDINGS[@]} Problem(e)
+$(printf '═%.0s' {1..70})
+${_TBL_HEADER}
+${_TBL_SEP}
+${_TBL_ROWS}"
 fi
 
 if [[ $OVERALL_STATUS -eq 0 ]]; then
