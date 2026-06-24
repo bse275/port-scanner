@@ -343,13 +343,15 @@ for CIDR in "${CIDR_RANGES[@]}"; do
       [[ "$ip" == "$known" ]] && is_known=1 && break
     done
     if [[ $is_known -eq 0 ]]; then
-      echo -e "  ${RED}${BOLD}⚠ UNBEKANNTER HOST entdeckt: ${ip}${RESET}"
       UNKNOWN_HOSTS+=("$ip")
     else
       echo -e "  ${GREEN}✓ Bekannt: ${ip}${RESET}"
     fi
   done < <(nmap -sn -PS80,443,25,9876 "$CIDR" -oG - 2>/dev/null \
     | grep "^Host:" | awk '{print $2}')
+  if [[ ${#UNKNOWN_HOSTS[@]} -gt 0 ]]; then
+    echo -e "  ${YELLOW}⚠ ${#UNKNOWN_HOSTS[@]} unbekannte Host(s) im Subnetz — werden geprüft${RESET}"
+  fi
 done
 
 # ---------------------------------------------------------------------------
