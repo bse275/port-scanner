@@ -21,7 +21,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/servers.conf"
 LOG_FILE="${SCRIPT_DIR}/check-blacklist.log"
-MAX_LOG_LINES=500
+MAX_LOG_LINES=200
 
 # Colors
 RED='\033[0;31m'

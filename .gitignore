@@ -1,4 +1,5 @@
 scan-ports.log
+check-blacklist.log
 mail.conf
 hc.conf
 *.tmp
