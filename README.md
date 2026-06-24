@@ -111,7 +111,9 @@ Jede Zeile definiert einen Server und seine erlaubten Ports:
 |---|---|
 | `80,443` | Nur diese Ports sind erlaubt |
 | `-` | Kein einziger Port darf offen sein |
-| *(leer)* | Wie `-` — kein Port erlaubt (deny by default) |
+| *(leer)* | Globaler Fallback `ALLOWED_PORTS` greift (Standard: 80, 443) |
+
+> **Wichtig:** Eine leere Port-Spalte bedeutet **nicht** "kein Port erlaubt" — sie fällt auf die Variable `ALLOWED_PORTS` am Anfang von `scan-ports.sh` zurück, die aktuell `80` und `443` enthält. Das betrifft in der Praxis nur Hosts die per Kommandozeile direkt übergeben werden (`./scan-ports.sh <ip>`), ohne Eintrag in `servers.conf`. Für alle Hosts in `servers.conf` sollte immer eine explizite Port-Spalte gesetzt sein.
 
 **Dritte Spalte `test`** — markiert einen Host als Test-Host für `--test` Modus (schneller Einzelscan ohne Discovery).
 
@@ -143,6 +145,18 @@ Ohne diese Zeile würde der Server beim nächsten Scan als "unbekannter Host" au
 ---
 
 ## Einstellungen
+
+**Globaler Port-Fallback** — greift wenn ein Host keine Port-Spalte in `servers.conf` hat (z.B. bei direktem Aufruf per Kommandozeile):
+```bash
+ALLOWED_PORTS=(
+  80    # HTTP
+  443   # HTTPS
+)
+```
+Für alle Hosts in `servers.conf` gilt dieser Fallback **nicht** — dort zählt immer die explizit eingetragene Port-Spalte. Um den Fallback zu deaktivieren (strict deny by default für direkte Aufrufe), einfach leer lassen:
+```bash
+ALLOWED_PORTS=()
+```
 
 **Log-Größe** — aktuell 500 Zeilen (~1,5 Jahre bei täglichem Scan):
 ```bash
