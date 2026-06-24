@@ -347,7 +347,7 @@ for CIDR in "${CIDR_RANGES[@]}"; do
     else
       echo -e "  ${GREEN}✓ Bekannt: ${ip}${RESET}"
     fi
-  done < <(nmap -sn -PS80,443,25,9876 "$CIDR" -oG - 2>/dev/null \
+  done < <(nmap -Pn --open -p 80,443,22,25,465,587,993,9876 -T4 "$CIDR" -oG - 2>/dev/null \
     | grep "^Host:" | awk '{print $2}')
 done
 
@@ -521,9 +521,6 @@ for TARGET in "${TARGETS[@]}"; do
 
   # Unbekannte Hosts: nur scannen wenn sie tatsächlich antworten
   if [[ -n "$IS_UNKNOWN" ]]; then
-    if ! nmap -sn -PS80,443,25,9876 "$TARGET" 2>/dev/null | grep -q "Host is up"; then
-      continue
-    fi
     echo -e "  ${RED}${BOLD}⚠ Unbekannter Host gefunden: ${TARGET}${RESET}"
   fi
 
