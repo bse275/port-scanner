@@ -86,8 +86,8 @@ if [[ $MAIL_TEST -eq 1 ]]; then
     printf "Server: %s\r\n" "$(hostname)"
     printf "Datum:  %s\r\n" "$(date '+%Y-%m-%d %H:%M:%S')"
   } > "$MAIL_TMP"
-  if curl -v --max-time 10 --connect-timeout 5 \
-      --url "smtps://${MAIL_HOST}:${MAIL_PORT}" \
+  if curl -v --max-time 10 --connect-timeout 5 --ssl-reqd \
+      --url "smtp://${MAIL_HOST}:${MAIL_PORT}" \
       --user "${MAIL_USER}:${MAIL_PASS}" \
       --mail-from "$MAIL_FROM" \
       --mail-rcpt "$MAIL_TO" \
@@ -461,8 +461,8 @@ send_mail() {
     echo "$body"
   } > "$mail_tmp"
 
-  curl -fsS --max-time 10 --connect-timeout 5 \
-    --url "smtps://${MAIL_HOST}:${MAIL_PORT}" \
+  curl -fsS --max-time 10 --connect-timeout 5 --ssl-reqd \
+    --url "smtp://${MAIL_HOST}:${MAIL_PORT}" \
     --user "${MAIL_USER}:${MAIL_PASS}" \
     --mail-from "$MAIL_FROM" \
     --mail-rcpt "$MAIL_TO" \
