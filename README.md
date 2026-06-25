@@ -1,19 +1,17 @@
-# Port Scanner — example.com Rechenzentrum
+# Port Scanner
 
-Überwacht alle Server im Rechenzentrum auf unerlaubte offene Ports.  
-Läuft automatisch per Cron-Job auf dem Raspberry Pi und meldet Probleme an healthchecks.io.
+Überwacht Server auf unerlaubte offene Ports.  
+Läuft automatisch per Cron-Job (z.B. auf einem Raspberry Pi) und meldet Probleme per Mail und an healthchecks.io.
 
 ---
 
 ## Hintergrund
 
-Die öffentlichen IPs (203.0.113.x) haben **keinen vorgelagerten Perimeter-Firewall** — was auf einem Proxmox-Host oder einer VM offen ist, ist direkt aus dem Internet erreichbar. Schutz auf VM-Ebene bietet ausschließlich die **Proxmox-Firewall**. Die internen Netze (Management, IPMI, VPN, etc.) sind über **MikroTik**-Geräte abgesichert und nicht öffentlich erreichbar.
-
-Der Scanner läuft von außen () und prüft was das Internet tatsächlich sieht — so fällt auf wenn die Proxmox-Firewall einer VM fehlt oder falsch konfiguriert ist.
+Öffentliche Server ohne vorgelagerte Perimeter-Firewall sind direkt aus dem Internet erreichbar. Der Scanner läuft von außen und prüft was das Internet tatsächlich sieht — so fällt auf wenn eine Firewall-Regel fehlt oder falsch konfiguriert ist.
 
 Erlaubt sind grundsätzlich nur:
 - **80 / 443** — HTTP/HTTPS (alle Webserver)
-- **25, 465, 587, 143, 993, 110, 995, 4190** — Mailports (nur Stalwart-Mailserver)
+- **25, 465, 587, 143, 993, 110, 995, 4190** — Mailports (nur Mailserver)
 - **9876** — SSH (nur Bastion-Host / Jump-Server)
 
 Alles andere ist ein Fund und löst eine Warnung aus.
@@ -51,7 +49,6 @@ Nach jedem Port-Scan startet `scan-ports.sh` automatisch `check-blacklist.sh`. D
 
 | DNSBL | Schwerpunkt |
 |---|---|
-| `zen.spamhaus.org` | Spam, Exploits, Botnets, dynamische IPs |
 | `bl.spamcop.net` | Spam-Quellen |
 | `dnsbl.sorbs.net` | Spam + offene Proxies |
 | `b.barracudacentral.org` | Spam-Quellen |
@@ -82,14 +79,15 @@ Bei einem Treffer wird eine Mail verschickt. Das Script kann auch eigenständig 
 |---|---|
 | `scan-ports.sh` | Hauptscript — führt den Port-Scan durch, startet danach `check-blacklist.sh` |
 | `check-blacklist.sh` | Prüft alle öffentlichen IPs gegen DNSBL-Blacklists |
-| `servers.conf` | Liste aller Server mit ihren jeweils erlaubten Ports |
+| `servers.conf` | Liste aller Server mit ihren jeweils erlaubten Ports (nicht im Repo) |
+| `servers.conf.example` | Vorlage für servers.conf |
 | `mail.conf` | SMTP-Zugangsdaten (nicht im Repo — von `mail.conf.example` ableiten) |
 | `mail.conf.example` | Vorlage für mail.conf |
 | `hc.conf` | healthchecks.io UUID (nicht im Repo — von `hc.conf.example` ableiten) |
 | `hc.conf.example` | Vorlage für hc.conf |
 | `scan-ports.log` | Wird nur bei Problemen beschrieben, max. 500 Zeilen (SD-Karte!) |
 | `check-blacklist.log` | Protokoll der Blacklist-Checks, max. 200 Zeilen |
-| `.gitignore` | Hält Logs, mail.conf und hc.conf aus dem Git-Repo raus |
+| `.gitignore` | Hält Logs, servers.conf, mail.conf und hc.conf aus dem Git-Repo raus |
 
 ---
 
@@ -99,10 +97,10 @@ Jede Zeile definiert einen Server und seine erlaubten Ports:
 
 ```
 # IP               Erlaubte Ports        Flag    Kommentar
-203.0.113.20      80,443                        # docker — nur Web
-203.0.113.35      80,443,25,465,...      test   # Mailserver — Test-Host
-203.0.113.30      -                             # postgres — darf gar nichts offen haben
-203.0.113.40      9876                          # Bastion — nur SSH
+203.0.113.10       80,443                        # Webserver — nur Web
+203.0.113.50       80,443,25,465,...      test   # Mailserver — Test-Host
+203.0.113.20       -                             # Datenbankserver — darf gar nichts offen haben
+203.0.113.40       9876                          # Bastion — nur SSH
 ```
 
 **Bedeutung der Port-Spalte:**
@@ -116,12 +114,6 @@ Jede Zeile definiert einen Server und seine erlaubten Ports:
 > **Wichtig:** Eine leere Port-Spalte bedeutet **nicht** "kein Port erlaubt" — sie fällt auf die Variable `ALLOWED_PORTS` am Anfang von `scan-ports.sh` zurück, die aktuell `80` und `443` enthält. Das betrifft in der Praxis nur Hosts die per Kommandozeile direkt übergeben werden (`./scan-ports.sh <ip>`), ohne Eintrag in `servers.conf`. Für alle Hosts in `servers.conf` sollte immer eine explizite Port-Spalte gesetzt sein.
 
 **Dritte Spalte `test`** — markiert einen Host als Test-Host für `--test` Modus (schneller Einzelscan ohne Discovery).
-
-**Kommentare** können VM-ID, Hostname und DNS-Name enthalten — rein informativ, haben keinen Einfluss auf den Scan:
-```
-203.0.113.20  80,443  # VM 101 — docker
-203.0.113.40  9876    # CT 200 — bastion01 / SSH-Jump (jump.it.example.com)
-```
 
 **CIDR-Zeilen** (z.B. `203.0.113.0/26`) lösen zusätzlich einen Discovery-Scan aus:  
 Alle aktiven Hosts im Subnetz werden gefunden. Hosts die **nicht** in der Liste stehen werden je nach Ergebnis gemeldet:
@@ -137,7 +129,7 @@ Der Discovery-Scan verwendet `--open` — IPs ohne echte OPEN-Ports (z.B. reine 
 
 Einfach eine neue Zeile eintragen:
 ```
-203.0.113.50      80,443                # neuer Webserver
+203.0.113.60       80,443                # neuer Webserver
 ```
 
 Ohne diese Zeile würde der Server beim nächsten Scan als "unbekannter Host" auftauchen (weil er per CIDR-Scan entdeckt wird).
@@ -163,6 +155,12 @@ ALLOWED_PORTS=()
 MAX_LOG_LINES=500
 ```
 
+**servers.conf** — Liste der Server:
+```bash
+cp servers.conf.example servers.conf
+# Server und erlaubte Ports eintragen
+```
+
 **mail.conf** — SMTP-Zugangsdaten für Mail-Benachrichtigung:
 ```bash
 cp mail.conf.example mail.conf
@@ -184,10 +182,10 @@ cp hc.conf.example hc.conf
 ./scan-ports.sh
 
 # Einzelnen Host direkt prüfen (ohne servers.conf):
-./scan-ports.sh 203.0.113.35
+./scan-ports.sh 203.0.113.10
 
 # Mehrere Hosts direkt:
-./scan-ports.sh 203.0.113.20 203.0.113.35
+./scan-ports.sh 203.0.113.10 203.0.113.50
 ```
 
 Ein Scan aller Server dauert auf dem Pi ca. **20–30 Minuten**.
@@ -241,7 +239,7 @@ crontab -e
 
 Beispiel: täglich um 02:00 Uhr nachts:
 ```
-0 2 * * * /port-scanner/scan-ports.sh
+0 2 * * * /home/admin/monitoring/scan-ports.sh
 ```
 
 ---
@@ -278,25 +276,10 @@ Wächst maximal auf 500 Zeilen:
 ```
 [2026-06-22 02:00:01] OK    — 1 Host(s) geprüft [TEST], keine Probleme
 [2026-06-23 02:00:01] FAIL  — 13 Host(s) geprüft, 3 Problem(e):
-    UNERLAUBTER PORT       203.0.113.2   53/tcp  open  domain
-    OFFENER REKURSIVER DNS 203.0.113.2   (löst externe Domains auf — DNS-Amplification-Risiko)
-    UNBEKANNTER HOST       203.0.113.55  22/tcp  open  ssh
+    UNERLAUBTER PORT       203.0.113.1    53/tcp  open  domain
+    OFFENER REKURSIVER DNS 203.0.113.1    (löst externe Domains auf — DNS-Amplification-Risiko)
+    UNBEKANNTER HOST       203.0.113.55   22/tcp  open  ssh
 ```
-
----
-
-## GitHub
-
-Repo: **https://github.com/bse275/port-scanner** (privat)
-
-Änderungen pushen:
-```bash
-git add scan-ports.sh servers.conf
-git commit -m "Kurze Beschreibung"
-git push
-```
-
-> `scan-ports.log`, `mail.conf` und `hc.conf` sind in `.gitignore` — werden nie ins Repo eingecheckt.
 
 ---
 
@@ -305,4 +288,4 @@ git push
 - `nmap` — `sudo apt install nmap`
 - `curl` — üblicherweise vorinstalliert
 - `dig` — `sudo apt install dnsutils` (für DNS-Rekursionsprüfung und Blacklist-Check; Fallback für Rekursionsprüfung: `nslookup`)
-- Raspberry Pi (oder beliebiger Linux-Rechner) mit Internetzugang Richtung RZ
+- Raspberry Pi oder beliebiger Linux-Rechner mit Internetzugang zu den Ziel-Servern
