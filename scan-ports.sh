@@ -461,7 +461,7 @@ send_mail() {
     echo "$body"
   } > "$mail_tmp"
 
-  curl -fsS --retry 2 --max-time 30 --connect-timeout 10 \
+  curl -fsS --max-time 10 --connect-timeout 5 \
     --url "smtps://${MAIL_HOST}:${MAIL_PORT}" \
     --user "${MAIL_USER}:${MAIL_PASS}" \
     --mail-from "$MAIL_FROM" \
