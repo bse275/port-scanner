@@ -7,3 +7,4 @@ servers.conf
 .DS_Store
 .lh/
 .claude/
+README.internal.md
