@@ -86,7 +86,7 @@ if [[ $MAIL_TEST -eq 1 ]]; then
     printf "Server: %s\r\n" "$(hostname)"
     printf "Datum:  %s\r\n" "$(date '+%Y-%m-%d %H:%M:%S')"
   } > "$MAIL_TMP"
-  if curl -fsS --retry 2 --max-time 30 \
+  if curl -v --max-time 10 --connect-timeout 5 \
       --url "smtps://${MAIL_HOST}:${MAIL_PORT}" \
       --user "${MAIL_USER}:${MAIL_PASS}" \
       --mail-from "$MAIL_FROM" \
