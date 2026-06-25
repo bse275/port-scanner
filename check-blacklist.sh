@@ -74,7 +74,7 @@ send_mail() {
     printf "\r\n"
     echo "$body"
   } > "$mail_tmp"
-  curl -fsS --retry 2 --max-time 30 \
+  curl -fsS --retry 2 --max-time 30 --connect-timeout 10 \
     --url "smtps://${MAIL_HOST}:${MAIL_PORT}" \
     --user "${MAIL_USER}:${MAIL_PASS}" \
     --mail-from "$MAIL_FROM" \

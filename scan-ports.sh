@@ -461,7 +461,7 @@ send_mail() {
     echo "$body"
   } > "$mail_tmp"
 
-  curl -fsS --retry 2 --max-time 30 \
+  curl -fsS --retry 2 --max-time 30 --connect-timeout 10 \
     --url "smtps://${MAIL_HOST}:${MAIL_PORT}" \
     --user "${MAIL_USER}:${MAIL_PASS}" \
     --mail-from "$MAIL_FROM" \
@@ -681,4 +681,7 @@ if [[ -f "$BLACKLIST_SCRIPT" && $TEST_MODE -eq 0 ]]; then
   bash "$BLACKLIST_SCRIPT" "${UNKNOWN_HOSTS[@]+"${UNKNOWN_HOSTS[@]}"}"
 fi
 
+# Stdout/Stderr schließen damit der tee-Subprozess sauber beendet wird
+exec 1>&- 2>&-
+wait
 exit $OVERALL_STATUS
