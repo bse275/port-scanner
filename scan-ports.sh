@@ -668,22 +668,6 @@ else
 fi
 
 MAIL_BODY="$CLEAN_OUTPUT"
-if [[ $OVERALL_STATUS -ne 0 && ${#FINDINGS[@]} -gt 0 ]]; then
-  _LIST=""
-  for f in "${FINDINGS[@]}"; do
-    F_TYPE=$(awk -F'  ' '{print $1}' <<< "$f")
-    F_HOST=$(awk -F'  ' '{print $2}' <<< "$f")
-    F_DETAIL=$(awk -F'  ' '{for(i=3;i<=NF;i++) printf "%s%s",$i,(i<NF?"  ":""); print ""}' <<< "$f")
-    _LIST+="  • ${F_TYPE} — ${F_HOST} — ${F_DETAIL}
-"
-  done
-  MAIL_BODY+="
-$(printf '═%.0s' {1..50})
- Zusammenfassung — ${#FINDINGS[@]} Problem(e)
-$(printf '═%.0s' {1..50})
-
-${_LIST}"
-fi
 
 if [[ $OVERALL_STATUS -eq 0 ]]; then
   send_mail "${MAIL_PREFIX} OK - ${HOST_COUNT} Hosts geprueft, ${SCAN_DATE}" "$MAIL_BODY"
