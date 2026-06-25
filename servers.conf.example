@@ -1,0 +1,37 @@
+# Server-Konfiguration für Port-Scanner
+#
+# Format:  IP/Hostname    erlaubte-ports    [flag]    # Kommentar
+#
+#   erlaubte-ports:
+#     kommagetrennte Portnummern  →  nur diese Ports sind OK
+#     -                           →  kein einziger Port darf offen sein
+#     (leer lassen)               →  globale ALLOWED_PORTS aus scan-ports.sh gelten
+#
+#   flag (optional):
+#     test    →  wird im --test Modus gescannt
+#     skip    →  Host wird beim Scan übersprungen (z.B. Netzwerk-/Broadcast-Adressen)
+#
+# CIDR-Zeilen (z.B. 10.0.0.0/24) lösen einen Discovery-Scan aus —
+# dort gefundene Hosts die NICHT unten eingetragen sind werden als UNBEKANNT markiert.
+# ---------------------------------------------------------------------------
+
+# CIDR-Scan — entdeckt alle aktiven Hosts im Subnetz automatisch
+203.0.113.0/26
+
+# ---------------------------------------------------------------------------
+# Infrastruktur
+# ---------------------------------------------------------------------------
+203.0.113.0         -       skip    # Netzwerkadresse
+203.0.113.1         -               # Gateway
+203.0.113.63        -       skip    # Broadcast-Adresse
+
+# ---------------------------------------------------------------------------
+# Server
+# ---------------------------------------------------------------------------
+203.0.113.10        80,443          # Webserver
+203.0.113.11        80,443          # Reverse Proxy
+203.0.113.20        -               # Datenbankserver (kein Internet)
+203.0.113.21        -               # Backup-Server (kein Internet)
+203.0.113.30        80,443          # Nextcloud
+203.0.113.40        9876    test    # Bastion / SSH-Jump (Test-Host)
+203.0.113.50        22,80,443,25,465,587,993    # Mailserver

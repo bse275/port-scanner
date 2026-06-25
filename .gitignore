@@ -2,6 +2,7 @@ scan-ports.log
 check-blacklist.log
 mail.conf
 hc.conf
+servers.conf
 *.tmp
 .DS_Store
 .lh/
