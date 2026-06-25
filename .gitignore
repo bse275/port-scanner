@@ -5,3 +5,4 @@ hc.conf
 *.tmp
 .DS_Store
 .lh/
+.claude/
