@@ -39,7 +39,6 @@ RESET='\033[0m'
 # DNSBLs die geprüft werden
 # ---------------------------------------------------------------------------
 DNSBL_LIST=(
-  "zen.spamhaus.org"
   "bl.spamcop.net"
   "dnsbl.sorbs.net"
   "b.barracudacentral.org"
@@ -229,24 +228,8 @@ for ip in "${PUBLIC_IPS[@]}"; do
     result=$(dig +short +time=5 +tries=1 "$query" A 2>/dev/null || true)
 
     if [[ -n "$result" ]]; then
-      # Spamhaus-Fehlercodes abfangen (keine echten Treffer)
-      if [[ "$result" == "127.255.255.255" || "$result" == "127.255.255.254" ]]; then
-        echo -e "    ${YELLOW}⚠ ${dnsbl}  →  Abfrage abgelehnt (Spamhaus-Limit/Autorisierung — kein echter Treffer)${RESET}"
-        continue
-      fi
-
-      # Bedeutung des Return-Codes nachschlagen (Spamhaus-spezifisch)
-      meaning=""
-      if [[ "$dnsbl" == "zen.spamhaus.org" ]]; then
-        case "$result" in
-          127.0.0.2) meaning=" (SBL — direktes Spamming)" ;;
-          127.0.0.3) meaning=" (SBL CSS — kompromittierter Host)" ;;
-          127.0.0.4|127.0.0.5|127.0.0.6|127.0.0.7) meaning=" (XBL — Exploit/Botnet)" ;;
-          127.0.0.10|127.0.0.11) meaning=" (PBL — dynamische IP)" ;;
-        esac
-      fi
-      echo -e "    ${RED}✗ GELISTET${RESET}  ${dnsbl}  →  ${result}${meaning}"
-      FINDINGS+=("${ip}  |  ${dnsbl}  |  ${result}${meaning}")
+      echo -e "    ${RED}✗ GELISTET${RESET}  ${dnsbl}  →  ${result}"
+      FINDINGS+=("${ip}  |  ${dnsbl}  |  ${result}")
       IP_CLEAN=0
       OVERALL_STATUS=1
     fi
@@ -298,7 +281,6 @@ Datum:  $(date '+%Y-%m-%d %H:%M:%S')
 Treffer:
 ${_BL_LIST}
 Bitte sofort prüfen und ggf. Delisting beantragen.
-Spamhaus:   https://www.spamhaus.org/lookup/
 Barracuda:  https://www.barracudacentral.org/lookups
 SORBS:      http://www.sorbs.net/lookup.shtml
 SpamCop:    https://www.spamcop.net/bl.shtml"
