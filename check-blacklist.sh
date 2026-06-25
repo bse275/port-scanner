@@ -62,6 +62,8 @@ send_mail() {
   [[ ! -f "$mail_conf" ]] && return 0
   # shellcheck source=/dev/null
   source "$mail_conf"
+  [[ "${MAIL_ENABLED:-true}" != "true" ]] && return 0
+
   local mail_tmp
   mail_tmp=$(mktemp)
   trap 'rm -f "$mail_tmp"' RETURN
