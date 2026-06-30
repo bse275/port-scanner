@@ -149,10 +149,6 @@ if [[ -f "$HC_CONF" ]]; then
   source "$HC_CONF"
 fi
 
-# Alle Ausgaben in Tempfile mitschreiben (für healthchecks.io Body bei Fehler)
-TMPFILE=$(mktemp)
-trap 'rm -f "$TMPFILE"' EXIT
-exec > >(tee "$TMPFILE") 2>&1
 
 # ---------------------------------------------------------------------------
 # Hosts, CIDR-Ranges und per-Host-Ports einlesen
@@ -717,7 +713,4 @@ if [[ -f "$BLACKLIST_SCRIPT" && $TEST_MODE -eq 0 ]]; then
   bash "$BLACKLIST_SCRIPT" "${UNKNOWN_HOSTS[@]+"${UNKNOWN_HOSTS[@]}"}"
 fi
 
-# Stdout/Stderr schließen damit der tee-Subprozess sauber beendet wird
-exec 1>&- 2>&-
-wait
 exit $OVERALL_STATUS
