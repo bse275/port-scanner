@@ -27,6 +27,12 @@ CONFIG_FILE="${SCRIPT_DIR}/servers.conf"
 LOG_FILE="${SCRIPT_DIR}/check-blacklist.log"
 MAX_LOG_LINES=200
 
+HC_ENABLED="false"
+HC_BL_UUID=""
+HC_BASE="https://hc-ping.com"
+HC_CONF="${SCRIPT_DIR}/hc.conf"
+[[ -f "$HC_CONF" ]] && source "$HC_CONF"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -201,6 +207,13 @@ if [[ ${#PUBLIC_IPS[@]} -eq 0 ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# healthchecks.io Start-Ping
+# ---------------------------------------------------------------------------
+if [[ -n "$HC_BL_UUID" && "$HC_ENABLED" == "true" ]]; then
+  curl -fsS --retry 3 --max-time 10 "${HC_BASE}/${HC_BL_UUID}/start" > /dev/null 2>&1 || true
+fi
+
 # Scan-Ausgabe starten
 # ---------------------------------------------------------------------------
 echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
@@ -301,5 +314,20 @@ fi
     printf '  %s\n' "${FINDINGS[@]}"
   fi
 } | append_log "$LOG_FILE" "$MAX_LOG_LINES"
+
+# ---------------------------------------------------------------------------
+# healthchecks.io Ping
+# ---------------------------------------------------------------------------
+if [[ -n "$HC_BL_UUID" && "$HC_ENABLED" == "true" ]]; then
+  if [[ $OVERALL_STATUS -eq 0 ]]; then
+    curl -fsS --retry 3 --max-time 10 \
+      --data-binary "Blacklist-Check $(date '+%Y-%m-%d %H:%M'): Alle ${#PUBLIC_IPS[@]} IPs sauber." \
+      "${HC_BASE}/${HC_BL_UUID}" > /dev/null 2>&1 || true
+  else
+    curl -fsS --retry 3 --max-time 10 \
+      --data-binary "Blacklist-Check $(date '+%Y-%m-%d %H:%M'): ${#FINDINGS[@]} Treffer! $(printf '%s\n' "${FINDINGS[@]}")" \
+      "${HC_BASE}/${HC_BL_UUID}/fail" > /dev/null 2>&1 || true
+  fi
+fi
 
 exit $OVERALL_STATUS
