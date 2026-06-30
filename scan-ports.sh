@@ -351,6 +351,11 @@ done
 # Scan-Ziele zusammenstellen: bekannte + unbekannte Hosts
 # Im Test-Modus: nur als "test" markierte Hosts
 # ---------------------------------------------------------------------------
+declare -A UNKNOWN_SET
+for h in "${UNKNOWN_HOSTS[@]}"; do
+  UNKNOWN_SET["$h"]=1
+done
+
 TARGETS=()
 if [[ $TEST_MODE -eq 1 ]]; then
   for h in "${KNOWN_HOSTS[@]}"; do
@@ -369,15 +374,10 @@ else
   for h in "${KNOWN_HOSTS[@]}"; do
     [[ -v HOST_SKIP[$h] ]] || TARGETS+=("$h")
   done
-  for h in "${UNKNOWN_HOSTS[@]}"; do
+  for h in "${!UNKNOWN_SET[@]}"; do
     TARGETS+=("$h")
   done
 fi
-
-declare -A UNKNOWN_SET
-for h in "${UNKNOWN_HOSTS[@]}"; do
-  UNKNOWN_SET["$h"]=1
-done
 
 echo ""
 echo -e "  Bekannte Hosts:    ${#KNOWN_HOSTS[@]}"
