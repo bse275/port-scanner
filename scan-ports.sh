@@ -385,9 +385,6 @@ echo ""
 echo -e "  Bekannte Hosts:    ${#KNOWN_HOSTS[@]}"
 echo -e "  CIDR-Ranges:       ${#CIDR_RANGES[@]}"
 
-if [[ -n "$HC_UUID" && $TEST_MODE -eq 0 && "$HC_ENABLED" == "true" ]]; then
-  curl -fsS --retry 3 --max-time 10 "${HC_BASE}/${HC_UUID}/start" > /dev/null 2>&1 || true
-fi
 
 # ---------------------------------------------------------------------------
 ALLOWED_SET=$(IFS=, ; echo "${ALLOWED_PORTS[*]}")
