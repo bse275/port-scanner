@@ -137,6 +137,8 @@ Datum:  $(date '+%Y-%m-%d %H:%M:%S')"
   exit 0
 fi
 
+trap 'stty sane 2>/dev/null || true' EXIT
+
 if ! command -v nmap &>/dev/null; then
   echo "Fehler: nmap ist nicht installiert. Bitte mit 'sudo apt install nmap' nachinstallieren." >&2
   exit 1
