@@ -547,7 +547,7 @@ for TARGET in "${TARGETS[@]}"; do
     echo ""
 
     NMAP_TMP=$(mktemp)
-    nmap -v --open -p 1-10000 -T4 --stats-every 30s "$TARGET" 2>&1 | tee "$NMAP_TMP"
+    nmap --open -p 1-10000 -T4 "$TARGET" > "$NMAP_TMP" 2>&1
     NMAP_OUTPUT=$(cat "$NMAP_TMP")
     rm -f "$NMAP_TMP"
 
