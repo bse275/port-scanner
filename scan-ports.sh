@@ -516,88 +516,115 @@ if [[ $TEST_MODE -eq 1 ]]; then
   echo ""
 fi
 
+HOST_COUNT=${#TARGETS[@]}
+SCAN_TMPDIR=$(mktemp -d)
+
 for TARGET in "${TARGETS[@]}"; do
   IS_UNKNOWN=${UNKNOWN_SET[$TARGET]:-}
   TARGET_PORTS="${HOST_PORTS[$TARGET]:-}"
 
-  # Unbekannte Hosts: nur scannen wenn sie tatsächlich antworten
-  if [[ -n "$IS_UNKNOWN" ]]; then
-    echo -e "  ${RED}${BOLD}⚠ Unbekannter Host gefunden: ${TARGET}${RESET}"
-  fi
+  (
+    FINDINGS=()
+    OVERALL_STATUS=0
+    HOST_STATUS=0
 
-  (( HOST_COUNT++ )) || true
-
-  echo ""
-  echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
-  if [[ -n "$IS_UNKNOWN" ]]; then
-    echo -e "${BOLD}  Scanne: ${TARGET}  ${RED}[UNBEKANNTER HOST]${RESET}"
-  else
-    echo -e "${BOLD}  Scanne: ${TARGET}${RESET}"
-  fi
-  echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
-
-  if [[ "$TARGET_PORTS" == "-" ]]; then
-    echo -e "  Erlaubte Ports: ${RED}keine — darf nicht erreichbar sein${RESET}"
-  elif [[ -n "$TARGET_PORTS" ]]; then
-    echo -e "  Erlaubte Ports: ${TARGET_PORTS}"
-  else
-    echo -e "  Erlaubte Ports: ${ALLOWED_SET} (global)"
-  fi
-  echo ""
-
-  NMAP_TMP=$(mktemp)
-  nmap -v --open -p 1-10000 -T4 --stats-every 30s "$TARGET" 2>&1 | tee "$NMAP_TMP"
-  NMAP_OUTPUT=$(cat "$NMAP_TMP")
-  rm -f "$NMAP_TMP"
-
-  if echo "$NMAP_OUTPUT" | grep -q "Host seems down"; then
-    [[ -z "$IS_UNKNOWN" ]] && echo -e "  ${YELLOW}⚠ Host antwortet nicht oder ist nicht erreichbar.${RESET}"
-    continue
-  fi
-
-  OPEN_PORTS=$(echo "$NMAP_OUTPUT" | grep -E '^[0-9]+/(tcp|udp)\s+open' || true)
-
-  if [[ -z "$OPEN_PORTS" ]]; then
     if [[ -n "$IS_UNKNOWN" ]]; then
-      echo -e "  ${YELLOW}⚠ Hinweis: Unbekannter Host entdeckt. servers.conf aktuell?${RESET}"
-      FINDINGS+=("UNBEKANNTER HOST  ${TARGET}  (aktiv, keine offenen Ports)")
-      OVERALL_STATUS=1
-    elif [[ "$TARGET_PORTS" == "-" ]]; then
-      echo -e "  ${GREEN}✓ Keine offenen Ports — korrekt so.${RESET}"
-    else
-      echo -e "  ${GREEN}✓ Keine offenen Ports gefunden.${RESET}"
+      echo -e "  ${RED}${BOLD}⚠ Unbekannter Host gefunden: ${TARGET}${RESET}"
     fi
-    continue
-  fi
 
-  HOST_STATUS=0
-
-  echo -e "  ${BOLD}Offene Ports:${RESET}"
-  while IFS= read -r line; do
-    PORT=$(echo "$line" | awk '{print $1}' | cut -d'/' -f1)
+    echo ""
+    echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
     if [[ -n "$IS_UNKNOWN" ]]; then
-      echo -e "  ${RED}✗ UNBEKANNTER HOST: ${line}${RESET}"
-      FINDINGS+=("UNBEKANNTER HOST  ${TARGET}  ${line}")
-      HOST_STATUS=1
-      OVERALL_STATUS=1
-    elif is_allowed "$TARGET" "$PORT"; then
-      echo -e "  ${GREEN}✓ ${line}${RESET}"
+      echo -e "${BOLD}  Scanne: ${TARGET}  ${RED}[UNBEKANNTER HOST]${RESET}"
     else
-      echo -e "  ${RED}✗ UNERLAUBT: ${line}${RESET}"
-      FINDINGS+=("UNERLAUBTER PORT  ${TARGET}  ${line}")
-      HOST_STATUS=1
-      OVERALL_STATUS=1
+      echo -e "${BOLD}  Scanne: ${TARGET}${RESET}"
     fi
-    [[ "$PORT" == "53" ]] && check_dns_recursive "$TARGET"
-  done <<< "$OPEN_PORTS"
+    echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
 
-  echo ""
-  if [[ $HOST_STATUS -eq 0 ]]; then
-    echo -e "  ${GREEN}${BOLD}✓ Alle offenen Ports sind erlaubt.${RESET}"
-  else
-    echo -e "  ${RED}${BOLD}✗ ACHTUNG: Unerlaubte Ports gefunden!${RESET}"
+    if [[ "$TARGET_PORTS" == "-" ]]; then
+      echo -e "  Erlaubte Ports: ${RED}keine — darf nicht erreichbar sein${RESET}"
+    elif [[ -n "$TARGET_PORTS" ]]; then
+      echo -e "  Erlaubte Ports: ${TARGET_PORTS}"
+    else
+      echo -e "  Erlaubte Ports: ${ALLOWED_SET} (global)"
+    fi
+    echo ""
+
+    NMAP_TMP=$(mktemp)
+    nmap -v --open -p 1-10000 -T4 --stats-every 30s "$TARGET" 2>&1 | tee "$NMAP_TMP"
+    NMAP_OUTPUT=$(cat "$NMAP_TMP")
+    rm -f "$NMAP_TMP"
+
+    if echo "$NMAP_OUTPUT" | grep -q "Host seems down"; then
+      [[ -z "$IS_UNKNOWN" ]] && echo -e "  ${YELLOW}⚠ Host antwortet nicht oder ist nicht erreichbar.${RESET}"
+      printf '' > "$SCAN_TMPDIR/${TARGET}.findings"
+      echo "0" > "$SCAN_TMPDIR/${TARGET}.status"
+      exit 0
+    fi
+
+    OPEN_PORTS=$(echo "$NMAP_OUTPUT" | grep -E '^[0-9]+/(tcp|udp)\s+open' || true)
+
+    if [[ -z "$OPEN_PORTS" ]]; then
+      if [[ -n "$IS_UNKNOWN" ]]; then
+        echo -e "  ${YELLOW}⚠ Hinweis: Unbekannter Host entdeckt. servers.conf aktuell?${RESET}"
+        FINDINGS+=("UNBEKANNTER HOST  ${TARGET}  (aktiv, keine offenen Ports)")
+        OVERALL_STATUS=1
+      elif [[ "$TARGET_PORTS" == "-" ]]; then
+        echo -e "  ${GREEN}✓ Keine offenen Ports — korrekt so.${RESET}"
+      else
+        echo -e "  ${GREEN}✓ Keine offenen Ports gefunden.${RESET}"
+      fi
+      printf '%s\n' "${FINDINGS[@]}" > "$SCAN_TMPDIR/${TARGET}.findings"
+      echo "$OVERALL_STATUS" > "$SCAN_TMPDIR/${TARGET}.status"
+      exit 0
+    fi
+
+    echo -e "  ${BOLD}Offene Ports:${RESET}"
+    while IFS= read -r line; do
+      PORT=$(echo "$line" | awk '{print $1}' | cut -d'/' -f1)
+      if [[ -n "$IS_UNKNOWN" ]]; then
+        echo -e "  ${RED}✗ UNBEKANNTER HOST: ${line}${RESET}"
+        FINDINGS+=("UNBEKANNTER HOST  ${TARGET}  ${line}")
+        HOST_STATUS=1
+        OVERALL_STATUS=1
+      elif is_allowed "$TARGET" "$PORT"; then
+        echo -e "  ${GREEN}✓ ${line}${RESET}"
+      else
+        echo -e "  ${RED}✗ UNERLAUBT: ${line}${RESET}"
+        FINDINGS+=("UNERLAUBTER PORT  ${TARGET}  ${line}")
+        HOST_STATUS=1
+        OVERALL_STATUS=1
+      fi
+      [[ "$PORT" == "53" ]] && check_dns_recursive "$TARGET"
+    done <<< "$OPEN_PORTS"
+
+    echo ""
+    if [[ $HOST_STATUS -eq 0 ]]; then
+      echo -e "  ${GREEN}${BOLD}✓ Alle offenen Ports sind erlaubt.${RESET}"
+    else
+      echo -e "  ${RED}${BOLD}✗ ACHTUNG: Unerlaubte Ports gefunden!${RESET}"
+    fi
+
+    printf '%s\n' "${FINDINGS[@]}" > "$SCAN_TMPDIR/${TARGET}.findings"
+    echo "$OVERALL_STATUS" > "$SCAN_TMPDIR/${TARGET}.status"
+  ) &
+done
+
+wait
+
+# Ergebnisse aus Parallel-Scans aggregieren
+for TARGET in "${TARGETS[@]}"; do
+  if [[ -f "$SCAN_TMPDIR/${TARGET}.status" ]]; then
+    s=$(< "$SCAN_TMPDIR/${TARGET}.status")
+    [[ "$s" == "1" ]] && OVERALL_STATUS=1
+  fi
+  if [[ -f "$SCAN_TMPDIR/${TARGET}.findings" ]]; then
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && FINDINGS+=("$line")
+    done < "$SCAN_TMPDIR/${TARGET}.findings"
   fi
 done
+rm -rf "$SCAN_TMPDIR"
 
 echo ""
 echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${RESET}"
@@ -639,9 +666,17 @@ if [[ $OVERALL_STATUS -ne 0 || $TEST_MODE -eq 1 ]]; then
   fi
 fi
 
-CLEAN_OUTPUT=$(sed 's/\x1B\[[0-9;]*[mK]//g' "$TMPFILE" \
-  | grep -v '^Connect Scan Timing:' \
-  | grep -v '^Stats: ')
+if [[ $OVERALL_STATUS -eq 0 ]]; then
+  CLEAN_OUTPUT="Scan ${SCAN_DATE}: Alle ${HOST_COUNT} Server OK — keine unerlaubten Ports."
+else
+  CLEAN_OUTPUT="Scan ${SCAN_DATE}: ACHTUNG — ${#FINDINGS[@]} Problem(e) bei ${HOST_COUNT} geprueften Hosts:"$'\n'
+  for f in "${FINDINGS[@]}"; do
+    F_TYPE=$(awk -F'  ' '{print $1}' <<< "$f")
+    F_HOST=$(awk -F'  ' '{print $2}' <<< "$f")
+    F_DETAIL=$(awk -F'  ' '{for(i=3;i<=NF;i++) printf "%s%s",$i,(i<NF?"  ":""); print ""}' <<< "$f")
+    CLEAN_OUTPUT+=$(printf "  %-24s  %-22s  %s\n" "$F_TYPE" "$F_HOST" "$F_DETAIL")
+  done
+fi
 SCAN_DATE=$(date '+%Y-%m-%d %H:%M')
 
 # ---------------------------------------------------------------------------
