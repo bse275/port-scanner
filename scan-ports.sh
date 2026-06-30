@@ -662,6 +662,8 @@ if [[ $OVERALL_STATUS -ne 0 || $TEST_MODE -eq 1 ]]; then
   fi
 fi
 
+SCAN_DATE=$(date '+%Y-%m-%d %H:%M')
+
 if [[ $OVERALL_STATUS -eq 0 ]]; then
   CLEAN_OUTPUT="Scan ${SCAN_DATE}: Alle ${HOST_COUNT} Server OK — keine unerlaubten Ports."
 else
@@ -673,7 +675,6 @@ else
     CLEAN_OUTPUT+=$(printf "  %-24s  %-22s  %s\n" "$F_TYPE" "$F_HOST" "$F_DETAIL")
   done
 fi
-SCAN_DATE=$(date '+%Y-%m-%d %H:%M')
 
 # ---------------------------------------------------------------------------
 # healthchecks.io Ping
