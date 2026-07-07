@@ -240,13 +240,16 @@ for ip in "${PUBLIC_IPS[@]}"; do
 
   for dnsbl in "${DNSBL_LIST[@]}"; do
     query="${rev}.${dnsbl}"
-    result=$(dig +short +time=5 +tries=1 "$query" A 2>/dev/null || true)
+    raw=$(dig +short +time=5 +tries=1 "$query" A 2>&1 || true)
+    result=$(grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' <<< "$raw" || true)
 
     if [[ -n "$result" ]]; then
       echo -e "    ${RED}✗ GELISTET${RESET}  ${dnsbl}  →  ${result}"
       FINDINGS+=("${ip}  |  ${dnsbl}  |  ${result}")
       IP_CLEAN=0
       OVERALL_STATUS=1
+    elif [[ -n "$raw" ]]; then
+      echo -e "    ${YELLOW}⚠ DNS-Fehler bei ${dnsbl} — übersprungen${RESET}  (${raw})"
     fi
   done
 
