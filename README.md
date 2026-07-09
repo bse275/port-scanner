@@ -28,13 +28,15 @@ Ein offener Resolver ist ein ernstes Sicherheitsproblem:
 
 **Verhalten des Scanners:**
 
-| Befund | Ausgabe | Wirkung |
-|---|---|---|
-| Port 53 offen, Rekursion festgestellt | `⚠ OFFENER REKURSIVER DNS` (rot) | FINDINGS + Mail + HC-Fail |
-| Port 53 offen, keine Rekursion | `⚠ DNS-Port 53 offen — keine externe Rekursion` (gelb) | nur Hinweis |
-| Port 53 offen, dig/nslookup fehlt | `⚠ Rekursionsprüfung übersprungen` (gelb) | nur Hinweis |
+Port 53 wird zuerst wie jeder andere Port bewertet (erlaubt oder nicht erlaubt). Die Rekursionsprüfung läuft danach immer zusätzlich — unabhängig davon ob der Port erlaubt ist:
 
-Die Prüfung erfolgt zusätzlich zur normalen Portbewertung — Port 53 kann also gleichzeitig als **unerlaubt** und als **rekursiver Resolver** gemeldet werden.
+| Situation | Port-Bewertung | Rekursionsbefund | Wirkung |
+|---|---|---|---|
+| Port 53 offen, **nicht erlaubt**, keine Rekursion | `✗ UNERLAUBTER PORT` | `⚠ keine Rekursion` (gelb) | HC-Fail + Mail |
+| Port 53 offen, **nicht erlaubt**, Rekursion | `✗ UNERLAUBTER PORT` + `✗ OFFENER REKURSIVER DNS` | (rot) | HC-Fail + Mail (2 Findings) |
+| Port 53 offen, **erlaubt**, keine Rekursion | `✓ OK` | `⚠ keine Rekursion` (gelb) | kein Alarm |
+| Port 53 offen, **erlaubt**, Rekursion | `✓ OK` | `✗ OFFENER REKURSIVER DNS` (rot) | HC-Fail + Mail |
+| Port 53 offen, dig/nslookup fehlt | erlaubt oder nicht | `⚠ Rekursionsprüfung übersprungen` (gelb) | je nach Port-Bewertung |
 
 **Voraussetzung:** `dig` aus dem Paket `dnsutils` (Fallback: `nslookup`):
 ```bash
@@ -97,8 +99,9 @@ Jede Zeile definiert einen Server und seine erlaubten Ports:
 
 ```
 # IP               Erlaubte Ports        Flag    Kommentar
+203.0.113.0        -                     skip    # Netzwerkadresse
 203.0.113.10       80,443                        # Webserver — nur Web
-203.0.113.50       80,443,25,465,...      test   # Mailserver — Test-Host
+203.0.113.50       80,443,25,465,...     test    # Mailserver — Test-Host
 203.0.113.20       -                             # Datenbankserver — darf gar nichts offen haben
 203.0.113.40       9876                          # Bastion — nur SSH
 ```
@@ -113,10 +116,15 @@ Jede Zeile definiert einen Server und seine erlaubten Ports:
 
 > **Wichtig:** Eine leere Port-Spalte bedeutet **nicht** "kein Port erlaubt" — sie fällt auf die Variable `ALLOWED_PORTS` am Anfang von `scan-ports.sh` zurück, die aktuell `80` und `443` enthält. Das betrifft in der Praxis nur Hosts die per Kommandozeile direkt übergeben werden (`./scan-ports.sh <ip>`), ohne Eintrag in `servers.conf`. Für alle Hosts in `servers.conf` sollte immer eine explizite Port-Spalte gesetzt sein.
 
-**Dritte Spalte `test`** — markiert einen Host als Test-Host für `--test` Modus (schneller Einzelscan ohne Discovery).
+**Dritte Spalte** — optionales Flag pro Host:
+
+| Flag | Bedeutung |
+|---|---|
+| `test` | Wird im `--test` Modus gescannt — Pre-flight Checks + Einzelscan ohne Discovery |
+| `skip` | Wird beim Scan immer übersprungen — sinnvoll für Gateway und Broadcast-Adressen |
 
 **CIDR-Zeilen** (z.B. `203.0.113.0/26`) lösen zusätzlich einen Discovery-Scan aus:  
-Alle aktiven Hosts im Subnetz werden gefunden. Hosts die **nicht** in der Liste stehen werden je nach Ergebnis gemeldet:
+Alle aktiven Hosts im Subnetz werden gefunden. Der Discovery-Scan prüft die Ports `80, 443, 22, 25, 465, 587, 993, 9876` — Hosts ohne offene Ports in diesem Set gelten nicht als aktiv (`--open`). Hosts die **nicht** in der Liste stehen werden je nach Ergebnis gemeldet:
 
 | Situation | Verhalten |
 |---|---|
@@ -167,6 +175,8 @@ cp mail.conf.example mail.conf
 # Zugangsdaten eintragen
 ```
 
+Der Scanner sendet nach jedem Scan eine Mail — bei OK und bei FAIL (im `--test` Modus mit `[TEST]`-Prefix). Um Mail komplett zu deaktivieren: `MAIL_ENABLED="false"` in `mail.conf` setzen.
+
 **hc.conf** — healthchecks.io UUID:
 ```bash
 cp hc.conf.example hc.conf
@@ -188,7 +198,7 @@ cp hc.conf.example hc.conf
 ./scan-ports.sh 203.0.113.10 203.0.113.50
 ```
 
-Ein Scan aller Server dauert auf dem Pi ca. **20–30 Minuten**.
+Alle Hosts werden parallel gescannt. Ein Scan aller Server dauert auf dem Pi ca. **20–30 Minuten**.
 
 ---
 
