@@ -25,7 +25,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/servers.conf"
 LOG_FILE="${SCRIPT_DIR}/check-blacklist.log"
-MAX_LOG_LINES=200
+LOG_RETENTION_DAYS=90
 
 HC_ENABLED="false"
 HC_BL_UUID=""
@@ -92,20 +92,26 @@ send_mail() {
 
 append_log() {
   local log="$1"
-  local max="$2"
-  local tmp
-  tmp=$(mktemp)
+  local retention_days="$2"
   {
     echo "=== $(date '+%Y-%m-%d %H:%M:%S') ==="
     cat
   } >> "$log"
-  # Log auf MAX_LOG_LINES begrenzen
-  local lines
-  lines=$(wc -l < "$log")
-  if (( lines > max )); then
-    tail -n "$max" "$log" > "$tmp"
-    mv "$tmp" "$log"
-  fi
+
+  # Log auf Aufbewahrungsdauer begrenzen (Einträge älter als retention_days raus)
+  local cutoff tmp
+  cutoff=$(date -d "-${retention_days} days" '+%Y-%m-%d')
+  tmp=$(mktemp)
+  awk -v cutoff="$cutoff" '
+    /^=== / {
+      if (buf != "" && keep) printf "%s", buf
+      keep = (substr($0, 5, 10) >= cutoff)
+      buf = $0 "\n"
+      next
+    }
+    { buf = buf $0 "\n" }
+    END { if (buf != "" && keep) printf "%s", buf }
+  ' "$log" > "$tmp" && mv "$tmp" "$log"
 }
 
 # ---------------------------------------------------------------------------
@@ -316,7 +322,7 @@ fi
     echo "ALARM — ${#FINDINGS[@]} Treffer:"
     printf '  %s\n' "${FINDINGS[@]}"
   fi
-} | append_log "$LOG_FILE" "$MAX_LOG_LINES"
+} | append_log "$LOG_FILE" "$LOG_RETENTION_DAYS"
 
 # ---------------------------------------------------------------------------
 # healthchecks.io Ping
