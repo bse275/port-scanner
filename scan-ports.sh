@@ -42,9 +42,9 @@ HC_UUID=""
 HC_BASE="https://hc-ping.com"
 
 # ---------------------------------------------------------------------------
-# Log — Maximale Anzahl Zeilen (schützt SD-Karte vor unbegrenztem Wachstum)
+# Log — Aufbewahrungsdauer in Tagen (schützt vor unbegrenztem Wachstum)
 # ---------------------------------------------------------------------------
-MAX_LOG_LINES=500
+LOG_RETENTION_DAYS=90
 
 # Colors
 RED='\033[0;31m'
@@ -644,25 +644,33 @@ echo -e "${BOLD}${CYAN}═══════════════════
 echo ""
 
 # ---------------------------------------------------------------------------
-# Log-Eintrag schreiben — bei Problemen immer, im Test-Modus auch bei OK
+# Log-Eintrag schreiben — jeder Lauf (läuft auf VM, keine SD-Karten-Schonung nötig)
 # ---------------------------------------------------------------------------
-if [[ $OVERALL_STATUS -ne 0 || $TEST_MODE -eq 1 ]]; then
-  {
-    TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-    if [[ $OVERALL_STATUS -eq 0 ]]; then
-      echo "[${TIMESTAMP}] OK    — ${HOST_COUNT} Host(s) geprüft [TEST], keine Probleme"
-    else
-      echo "[${TIMESTAMP}] FAIL  — ${HOST_COUNT} Host(s) geprüft${TEST_MODE:+ [TEST]}, ${#FINDINGS[@]} Problem(e):"
-      for f in "${FINDINGS[@]}"; do
-        echo "    ${f}"
-      done
-    fi
-  } >> "$LOG_FILE"
-
-  if [[ $(wc -l < "$LOG_FILE") -gt $MAX_LOG_LINES ]]; then
-    tail -n "$MAX_LOG_LINES" "$LOG_FILE" > "${LOG_FILE}.tmp" && mv "${LOG_FILE}.tmp" "$LOG_FILE"
+{
+  TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+  TEST_SUFFIX=""
+  [[ $TEST_MODE -eq 1 ]] && TEST_SUFFIX=" [TEST]"
+  if [[ $OVERALL_STATUS -eq 0 ]]; then
+    echo "[${TIMESTAMP}] OK    — ${HOST_COUNT} Host(s) geprüft${TEST_SUFFIX}, keine Probleme"
+  else
+    echo "[${TIMESTAMP}] FAIL  — ${HOST_COUNT} Host(s) geprüft${TEST_SUFFIX}, ${#FINDINGS[@]} Problem(e):"
+    for f in "${FINDINGS[@]}"; do
+      echo "    ${f}"
+    done
   fi
-fi
+} >> "$LOG_FILE"
+
+LOG_CUTOFF=$(date -d "-${LOG_RETENTION_DAYS} days" '+%Y-%m-%d')
+awk -v cutoff="$LOG_CUTOFF" '
+  /^\[/ {
+    if (buf != "" && keep) printf "%s", buf
+    keep = (substr($0, 2, 10) >= cutoff)
+    buf = $0 "\n"
+    next
+  }
+  { buf = buf $0 "\n" }
+  END { if (buf != "" && keep) printf "%s", buf }
+' "$LOG_FILE" > "${LOG_FILE}.tmp" && mv "${LOG_FILE}.tmp" "$LOG_FILE"
 
 SCAN_DATE=$(date '+%Y-%m-%d %H:%M')
 
