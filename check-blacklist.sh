@@ -23,14 +23,15 @@ for arg in "$@"; do
 done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="${SCRIPT_DIR}/servers.conf"
+CONFIG_DIR="${PORT_SCANNER_CONFIG_DIR:-/etc/port-scanner}"
+CONFIG_FILE="${CONFIG_DIR}/servers.conf"
 LOG_FILE="${SCRIPT_DIR}/check-blacklist.log"
 LOG_RETENTION_DAYS=90
 
 HC_ENABLED="false"
 HC_BL_UUID=""
 HC_BASE="https://hc-ping.com"
-HC_CONF="${SCRIPT_DIR}/hc.conf"
+HC_CONF="${CONFIG_DIR}/hc.conf"
 [[ -f "$HC_CONF" ]] && source "$HC_CONF"
 
 # Colors
@@ -64,7 +65,7 @@ reverse_ip() {
 send_mail() {
   local subject="$1"
   local body="$2"
-  local mail_conf="${SCRIPT_DIR}/mail.conf"
+  local mail_conf="${CONFIG_DIR}/mail.conf"
   [[ ! -f "$mail_conf" ]] && return 0
   # shellcheck source=/dev/null
   source "$mail_conf"
@@ -118,7 +119,7 @@ append_log() {
 # --mail-test
 # ---------------------------------------------------------------------------
 if [[ $MAIL_TEST -eq 1 ]]; then
-  MAIL_CONF="${SCRIPT_DIR}/mail.conf"
+  MAIL_CONF="${CONFIG_DIR}/mail.conf"
   if [[ ! -f "$MAIL_CONF" ]]; then
     echo -e "${RED}Fehler: mail.conf nicht gefunden${RESET}" >&2
     exit 1
@@ -154,7 +155,7 @@ if [[ $TEST_CONFIG -eq 1 ]]; then
     echo -e "  ${RED}✗ dig nicht gefunden (bitte bind-utils oder dnsutils installieren)${RESET}"
   fi
 
-  if [[ -f "${SCRIPT_DIR}/mail.conf" ]]; then
+  if [[ -f "${CONFIG_DIR}/mail.conf" ]]; then
     echo -e "  ${GREEN}✓ mail.conf gefunden${RESET}"
   else
     echo -e "  ${YELLOW}⚠ mail.conf fehlt — keine E-Mail-Benachrichtigung${RESET}"

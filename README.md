@@ -81,15 +81,21 @@ Bei einem Treffer wird eine Mail verschickt. Das Script kann auch eigenständig 
 |---|---|
 | `scan-ports.sh` | Hauptscript — führt den Port-Scan durch, startet danach `check-blacklist.sh` |
 | `check-blacklist.sh` | Prüft alle öffentlichen IPs gegen DNSBL-Blacklists |
-| `servers.conf` | Liste aller Server mit ihren jeweils erlaubten Ports (nicht im Repo) |
+| `servers.conf` | Liste aller Server mit ihren jeweils erlaubten Ports (nicht im Repo, liegt unter `/etc/port-scanner/`) |
 | `servers.conf.example` | Vorlage für servers.conf |
-| `mail.conf` | SMTP-Zugangsdaten (nicht im Repo — von `mail.conf.example` ableiten) |
+| `mail.conf` | SMTP-Zugangsdaten (nicht im Repo, liegt unter `/etc/port-scanner/` — von `mail.conf.example` ableiten) |
 | `mail.conf.example` | Vorlage für mail.conf |
-| `hc.conf` | healthchecks.io UUID (nicht im Repo — von `hc.conf.example` ableiten) |
+| `hc.conf` | healthchecks.io UUID (nicht im Repo, liegt unter `/etc/port-scanner/` — von `hc.conf.example` ableiten) |
 | `hc.conf.example` | Vorlage für hc.conf |
 | `scan-ports.log` | Wird nur bei Problemen beschrieben, max. 500 Zeilen (SD-Karte!) |
 | `check-blacklist.log` | Protokoll der Blacklist-Checks, max. 200 Zeilen |
 | `.gitignore` | Hält Logs, servers.conf, mail.conf und hc.conf aus dem Git-Repo raus |
+
+> **Config-Verzeichnis:** `servers.conf`, `mail.conf` und `hc.conf` liegen standardmäßig
+> unter `/etc/port-scanner/`, getrennt vom Script-Verzeichnis — analog zu
+> `dns-watchdog`/`ssl-watchdog`. Überschreibbar per Umgebungsvariable
+> `PORT_SCANNER_CONFIG_DIR` (z. B. für lokale Tests). Logs (`*.log`) bleiben im
+> Script-Verzeichnis.
 
 ---
 
@@ -165,13 +171,14 @@ MAX_LOG_LINES=500
 
 **servers.conf** — Liste der Server:
 ```bash
-cp servers.conf.example servers.conf
+mkdir -p /etc/port-scanner
+cp servers.conf.example /etc/port-scanner/servers.conf
 # Server und erlaubte Ports eintragen
 ```
 
 **mail.conf** — SMTP-Zugangsdaten für Mail-Benachrichtigung:
 ```bash
-cp mail.conf.example mail.conf
+cp mail.conf.example /etc/port-scanner/mail.conf
 # Zugangsdaten eintragen
 ```
 
@@ -179,7 +186,7 @@ Der Scanner sendet nach jedem Scan eine Mail — bei OK und bei FAIL (im `--test
 
 **hc.conf** — healthchecks.io UUID:
 ```bash
-cp hc.conf.example hc.conf
+cp hc.conf.example /etc/port-scanner/hc.conf
 # UUID eintragen
 ```
 

@@ -57,14 +57,15 @@ RESET='\033[0m'
 # ---------------------------------------------------------------------------
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="${SCRIPT_DIR}/servers.conf"
+CONFIG_DIR="${PORT_SCANNER_CONFIG_DIR:-/etc/port-scanner}"
+CONFIG_FILE="${CONFIG_DIR}/servers.conf"
 LOG_FILE="${SCRIPT_DIR}/scan-ports.log"
 
 # ---------------------------------------------------------------------------
 # --mail-test: Testmail senden und beenden
 # ---------------------------------------------------------------------------
 if [[ $MAIL_TEST -eq 1 ]]; then
-  MAIL_CONF="${SCRIPT_DIR}/mail.conf"
+  MAIL_CONF="${CONFIG_DIR}/mail.conf"
   if [[ ! -f "$MAIL_CONF" ]]; then
     echo -e "${RED}Fehler: mail.conf nicht gefunden (${MAIL_CONF})${RESET}" >&2
     echo -e "Vorlage: mail.conf.example" >&2
@@ -104,7 +105,7 @@ fi
 # --hc-test / --hc-fail: Testping an healthchecks.io senden und beenden
 # ---------------------------------------------------------------------------
 if [[ $HC_TEST -eq 1 ]]; then
-  HC_CONF="${SCRIPT_DIR}/hc.conf"
+  HC_CONF="${CONFIG_DIR}/hc.conf"
   if [[ ! -f "$HC_CONF" ]]; then
     echo -e "${RED}Fehler: hc.conf nicht gefunden (${HC_CONF})${RESET}" >&2
     echo -e "Vorlage: hc.conf.example" >&2
@@ -145,7 +146,7 @@ if ! command -v nmap &>/dev/null; then
 fi
 
 # hc.conf laden falls vorhanden
-HC_CONF="${SCRIPT_DIR}/hc.conf"
+HC_CONF="${CONFIG_DIR}/hc.conf"
 if [[ -f "$HC_CONF" ]]; then
   # shellcheck source=/dev/null
   source "$HC_CONF"
@@ -263,7 +264,7 @@ if [[ $TEST_CONFIG -eq 1 ]]; then
 
   # --- mail.conf ---
   echo -e "${BOLD}mail.conf${RESET}"
-  MAIL_CONF="${SCRIPT_DIR}/mail.conf"
+  MAIL_CONF="${CONFIG_DIR}/mail.conf"
   if [[ ! -f "$MAIL_CONF" ]]; then
     echo -e "  ${YELLOW}⚠ Nicht gefunden — keine Mail-Benachrichtigung${RESET}"
   else
@@ -439,7 +440,7 @@ check_dns_recursive() {
 send_mail() {
   local subject="$1"
   local body="$2"
-  local mail_conf="${SCRIPT_DIR}/mail.conf"
+  local mail_conf="${CONFIG_DIR}/mail.conf"
 
   [[ ! -f "$mail_conf" ]] && return 0
   # shellcheck source=/dev/null
